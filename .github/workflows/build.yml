@@ -1,0 +1,49 @@
+name: Fabriquer l'installateur
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  installateur:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Écrire la version
+        shell: pwsh
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          DEPOT: ${{ github.repository }}
+        run: |
+          $version = $env:TAG.TrimStart('v')
+          Set-Content -Path version.py -Value "VERSION = '$version'" -Encoding ascii
+          Add-Content -Path version.py -Value "DEPOT = '$($env:DEPOT)'" -Encoding ascii
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Installer les bibliothèques
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Construire l'application
+        run: pyinstaller --noconfirm --windowed --name PhotoClasse --collect-all mediapipe --collect-all rawpy main.py
+
+      - name: Installer Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Construire l'installateur
+        shell: pwsh
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$($env:APP_VERSION)" installateur.iss'
+
+      - name: Joindre l'installateur à la version publiée
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" sortie_installateur/PhotoClasse_Setup.exe --clobber
