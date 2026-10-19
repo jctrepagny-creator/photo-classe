@@ -1,0 +1,9 @@
+rawpy
+numpy
+opencv-python
+mediapipe
+PySide6
+Pillow
+scikit-learn
+joblib
+requests
