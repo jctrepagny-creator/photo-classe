@@ -1,5 +1,6 @@
 """Lecture des photos : RAW de toutes marques (Canon, Nikon, Sony, Fuji, Olympus, Panasonic,
 Pentax, Leica, Hasselblad, Phase One...) et images JPEG / TIFF / PNG."""
+import struct
 from pathlib import Path
 
 import cv2
@@ -33,13 +34,24 @@ def _lire_image(chemin):
 
 
 def _orientation(chemin):
-    """Sens de prise de vue lu dans le fichier RAW (1 = normal, 6 = portrait...)."""
+    """Sens de prise de vue (balise EXIF 274 de l'en-tête TIFF du RAW) : 1 = normal, 6 = portrait..."""
     try:
-        from PIL import Image
-        with Image.open(str(chemin)) as im:
-            return int(im.getexif().get(274, 1))
+        with open(chemin, 'rb') as f:
+            tete = f.read(1 << 20)
+        e = '<' if tete[:2] == b'II' else '>' if tete[:2] == b'MM' else None
+        if e is None or struct.unpack(e + 'H', tete[2:4])[0] != 42:
+            return 1
+        pos = struct.unpack(e + 'I', tete[4:8])[0]
+        n = struct.unpack(e + 'H', tete[pos:pos + 2])[0]
+        for i in range(n):
+            ent = tete[pos + 2 + 12 * i: pos + 14 + 12 * i]
+            tag = struct.unpack(e + 'H', ent[:2])[0]
+            if tag == 274:
+                v = struct.unpack(e + 'H', ent[8:10])[0]
+                return v if 1 <= v <= 8 else 1
     except Exception:
-        return 1
+        pass
+    return 1
 
 
 def _redresser(img, o):

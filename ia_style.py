@@ -41,7 +41,13 @@ class StyleIA:
         r['da'] = float(np.clip(r['da'], -30.0, 30.0))
         r['db'] = float(np.clip(r['db'], -30.0, 30.0))
         r['nettete'] = float(np.clip(r['nettete'], 0.0, 2.0))
-        x0, y0, x1, y1 = (min(max(r[k], 0.0), 1.0) for k in ('x0', 'y0', 'x1', 'y1'))
+        # les 4 dernières sorties sont le cadre RELATIF au groupe de visages
+        # (sans visage, la « boîte » est l'image entière : le cadre est alors absolu)
+        bx0, by0, bx1, by1 = (float(v) for v in carac[11:15])
+        lw, lh = max(bx1 - bx0, 1e-3), max(by1 - by0, 1e-3)
+        x0, y0 = bx0 + r['x0'] * lw, by0 + r['y0'] * lh
+        x1, y1 = bx0 + r['x1'] * lw, by0 + r['y1'] * lh
+        x0, y0, x1, y1 = (min(max(v, 0.0), 1.0) for v in (x0, y0, x1, y1))
         if x1 - x0 < 0.3 or y1 - y0 < 0.3:
             x0, y0, x1, y1 = 0.0, 0.0, 1.0, 1.0
         r['cadre'] = (x0, y0, x1, y1)

@@ -11,7 +11,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from detection_visages import detecter_visages
+from detection_visages import boite_groupe, detecter_visages
 from ia_style import StyleIA, extraire_caracteristiques
 from lecture_raw import EXT_IMAGES, EXT_TOUT, charger_raw
 from traitement_image import (vers_float, vers_uint8, miniature, appliquer_cadrage,
@@ -140,7 +140,11 @@ def entrainer_depuis_exemples(dossier_exemples, chemin_modele, rappel=None):
             cibles = reglages_cibles(f_avant, f_apres, cadre)
             visages = detecter_visages(vers_uint8(miniature(f_avant, 768)))
             X.append(extraire_caracteristiques(miniature(f_avant, 256), visages))
-            Y.append(cibles + list(cadre))
+            b0, b1, b2, b3 = boite_groupe(visages) or (0.0, 0.0, 1.0, 1.0)
+            lw, lh = max(b2 - b0, 1e-3), max(b3 - b1, 1e-3)
+            relatif = [(cadre[0] - b0) / lw, (cadre[1] - b1) / lh,
+                       (cadre[2] - b0) / lw, (cadre[3] - b1) / lh]
+            Y.append(cibles + relatif)
             _rappel(i, n, 'ok', raw.name, '')
         except Exception as e:
             ignorees += 1
