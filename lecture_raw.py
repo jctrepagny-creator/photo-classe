@@ -32,16 +32,46 @@ def _lire_image(chemin):
     return (img.astype(np.uint16) * 257) if img.dtype == np.uint8 else img.astype(np.uint16)
 
 
+def _apercu_integre(chemin):
+    """Plan B : la plupart des RAW (NEF, CR3, ARW...) contiennent un grand JPEG d'aperçu.
+    On prend le plus grand JPEG lisible du fichier (utile pour les appareils trop récents
+    pour le décodeur RAW)."""
+    data = Path(chemin).read_bytes()
+    meilleur, surface = None, 0
+    debut, essais = 0, 0
+    while essais < 12:
+        pos = data.find(b'\xff\xd8\xff', debut)
+        if pos < 0:
+            break
+        debut = pos + 3
+        essais += 1
+        img = cv2.imdecode(np.frombuffer(data[pos:], dtype=np.uint8), cv2.IMREAD_COLOR)
+        if img is not None and img.shape[0] * img.shape[1] > surface:
+            meilleur, surface = img, img.shape[0] * img.shape[1]
+    if meilleur is None or surface < 500_000:      # moins d'un demi-mégapixel : trop petit
+        raise ValueError('aperçu intégré introuvable')
+    return cv2.cvtColor(meilleur, cv2.COLOR_BGR2RGB).astype(np.uint16) * 257
+
+
+def _texte_erreur(e):
+    m = e.args[0] if e.args else str(e)
+    return m.decode('utf-8', 'replace') if isinstance(m, bytes) else str(m)
+
+
 def charger_raw(chemin) -> np.ndarray:
-    """Retourne une image RGB (uint16) : RAW décodé, ou image ordinaire."""
+    """Retourne une image RGB (uint16) : RAW décodé, sinon aperçu intégré, ou image ordinaire."""
     if Path(chemin).suffix.lower() in EXT_IMAGES:
         return _lire_image(chemin)
+    import rawpy
     try:
-        import rawpy
         with rawpy.imread(str(chemin)) as raw:
             return raw.postprocess(use_camera_wb=True, no_auto_bright=True, output_bps=16)
     except Exception as erreur_raw:
-        try:                                  # extension inconnue mais c'est peut-être une image
-            return _lire_image(chemin)
-        except Exception:
-            raise erreur_raw
+        for plan_b in (_apercu_integre, _lire_image):  # aperçu du RAW, puis image déguisée
+            try:
+                img = plan_b(chemin)
+                if img.shape[0] * img.shape[1] >= 500_000:   # évite une simple vignette
+                    return img
+            except Exception:
+                pass
+        raise ValueError(f"{_texte_erreur(erreur_raw)} ({Path(chemin).name})")
