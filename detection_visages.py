@@ -1,4 +1,5 @@
-'''Détection des visages (MediaPipe si disponible, sinon OpenCV).'''
+'''Détection des visages (MediaPipe si disponible, sinon OpenCV).
+Une erreur de détection ne doit jamais interrompre un lot : on renvoie alors « aucun visage ».'''
 import cv2
 import numpy as np
 
@@ -37,7 +38,11 @@ def detecter_visages(rgb8):
                            min(1.0, b.xmin + b.width), min(1.0, b.ymin + b.height)))
         return boites
     except Exception:
+        pass
+    try:
         return _haar(rgb8)
+    except Exception:
+        return []
 
 
 def boite_groupe(visages):

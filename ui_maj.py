@@ -1,86 +1,48 @@
-'''Bouton « Mettre à jour » et vérification automatique au lancement.'''
-from PySide6.QtCore import QObject, QThread, QTimer, Signal
-from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
+'''Gestionnaire de mises à jour (en arrière-plan) utilisé par la fenêtre et les réglages.'''
+from PySide6.QtCore import QObject, Signal
 
 import mise_a_jour
-from i18n import t
-from version import VERSION
+from taches import Tache
 
 
-class _Travail(QThread):
-    trouvee = Signal(str, str)
-    rien = Signal()
+class GestionnaireMaj(QObject):
+    disponible = Signal(str, str)     # version, url
+    a_jour = Signal()
+    echec = Signal()
     progression = Signal(int)
-    fini = Signal(str)
+    lancee = Signal()                 # l'installateur est démarré : fermer l'application
+    erreur_install = Signal(str)
 
-    def __init__(self, url=None):
-        super().__init__()
-        self.url = url
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._taches = []
+        self.version_dispo = None
+        self.url = None
 
-    def run(self):
-        if self.url is None:
-            res = mise_a_jour.verifier()
-            if res:
-                self.trouvee.emit(*res)
-            else:
-                self.rien.emit()
-            return
-        try:
-            mise_a_jour.telecharger_et_installer(self.url, self.progression.emit)
-            self.fini.emit('ok')
-        except Exception as e:
-            self.fini.emit(f'Erreur : {e}')
+    def _lancer(self, tache):
+        self._taches.append(tache)
+        tache.finished.connect(lambda: self._taches.remove(tache) if tache in self._taches else None)
+        tache.start()
 
+    def verifier(self):
+        tache = Tache(mise_a_jour.verifier, parent=self)
+        tache.fini.connect(self._resultat)
+        tache.echec.connect(lambda _m: self.echec.emit())
+        self._lancer(tache)
 
-class GestionMaj(QObject):
-    def __init__(self, fen, layout):
-        super().__init__(fen)
-        self.fen = fen
-        self.langue = fen.cfg.langue
-        self.silencieux = True
-        self.travail = None
-        fen.setWindowTitle(f'{fen.windowTitle()} - v{VERSION}')
-        self.bouton = QPushButton(t('maj', self.langue))
-        self.bouton.clicked.connect(self.verifier_manuel)
-        layout.addWidget(self.bouton)
-        QTimer.singleShot(2000, self.verifier_auto)
-
-    def verifier_auto(self):
-        self._chercher(True)
-
-    def verifier_manuel(self, *_):
-        self._chercher(False)
-
-    def _chercher(self, silencieux):
-        self.silencieux = silencieux
-        self.travail = _Travail()
-        self.travail.trouvee.connect(self._trouvee)
-        self.travail.rien.connect(self._rien)
-        self.travail.start()
-
-    def _rien(self):
-        if not self.silencieux:
-            QMessageBox.information(self.fen, '', t('maj_a_jour', self.langue))
-
-    def _trouvee(self, version, url):
-        en_cours = getattr(self.fen, 'travail', None)
-        if en_cours is not None and en_cours.isRunning():
-            QMessageBox.information(self.fen, '', t('maj_occupe', self.langue))
-            return
-        rep = QMessageBox.question(self.fen, '',
-                                   t('maj_dispo', self.langue).format(version=version))
-        if rep != QMessageBox.Yes:
-            return
-        self.bouton.setEnabled(False)
-        self.fen.barre.setMaximum(100)
-        self.travail = _Travail(url)
-        self.travail.progression.connect(self.fen.barre.setValue)
-        self.travail.fini.connect(self._fini)
-        self.travail.start()
-
-    def _fini(self, resultat):
-        if resultat == 'ok':
-            QApplication.quit()
+    def _resultat(self, r):
+        if r and r[0] == 'maj':
+            self.version_dispo, self.url = r[1], r[2]
+            self.disponible.emit(r[1], r[2])
+        elif r and r[0] == 'a_jour':
+            self.a_jour.emit()
         else:
-            self.bouton.setEnabled(True)
-            QMessageBox.warning(self.fen, '', resultat)
+            self.echec.emit()
+
+    def installer(self):
+        if not self.url:
+            return
+        tache = Tache(mise_a_jour.telecharger_et_installer, self.url, self.progression.emit, parent=self)
+        tache.fini.connect(lambda _r: self.lancee.emit())
+        tache.echec.connect(self.erreur_install.emit)
+        self._lancer(tache)

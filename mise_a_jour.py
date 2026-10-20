@@ -1,5 +1,6 @@
 '''Vérification et installation des mises à jour via les versions (Releases) GitHub.'''
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -15,26 +16,25 @@ def _numero(texte):
 
 
 def verifier():
-    '''Retourne (version, url_du_fichier) si une version plus récente existe, sinon None.
-    Toute erreur (pas d'internet, etc.) est silencieuse : l'application
-    continue simplement de fonctionner.'''
+    '''Retourne ('maj', version, url) si une version plus récente existe,
+    ('a_jour',) si on est à jour, ('erreur',) si la vérification est impossible.'''
     if not DEPOT:
-        return None
+        return ('erreur',)
     try:
         r = requests.get(API.format(depot=DEPOT), timeout=10, headers={
             'Accept': 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28'})
         if r.status_code != 200:
-            return None
+            return ('erreur',)
         info = r.json()
         if _numero(info['tag_name']) <= _numero(VERSION):
-            return None
+            return ('a_jour',)
         for fichier in info.get('assets', []):
             if fichier['name'].endswith('_Setup.exe'):
-                return info['tag_name'].lstrip('v'), fichier['browser_download_url']
+                return ('maj', info['tag_name'].lstrip('v'), fichier['browser_download_url'])
+        return ('erreur',)
     except Exception:
-        return None
-    return None
+        return ('erreur',)
 
 
 def telecharger_et_installer(url, progression=None):
@@ -50,5 +50,6 @@ def telecharger_et_installer(url, progression=None):
                 fait += len(morceau)
                 if progression and total:
                     progression(int(100 * fait / total))
+    drapeaux = getattr(subprocess, 'DETACHED_PROCESS', 0) if sys.platform == 'win32' else 0
     subprocess.Popen([str(cible), '/SILENT', '/CLOSEAPPLICATIONS'],
-                     creationflags=subprocess.DETACHED_PROCESS, close_fds=True)
+                     creationflags=drapeaux, close_fds=True)

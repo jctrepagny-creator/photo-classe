@@ -1,9 +1,11 @@
 '''Apprentissage à partir des paires avant (RAW) / après (image retouchée).
 
-Organisation attendue du dossier d'exemples :
-    exemples/avant/IMG_0001.CR2   (le RAW d'origine)
-    exemples/apres/IMG_0001.jpg   (la même photo retouchée par vous, même nom)
+Organisation du dossier d'exemples (gérée par l'application, page « Exemples ») :
+    avant/IMG_0001.CR2   (le RAW d'origine)
+    apres/IMG_0001.jpg   (la même photo retouchée par vous, même nom)
 '''
+import json
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -11,11 +13,55 @@ import numpy as np
 
 from detection_visages import detecter_visages
 from ia_style import StyleIA, extraire_caracteristiques
-from lecture_raw import charger_raw
+from lecture_raw import EXT_IMAGES, EXT_RAW, charger_raw
 from traitement_image import (vers_float, vers_uint8, miniature, appliquer_cadrage,
                               luminance_lineaire, lab_moyen, nettete_mesure)
 
-EXT_APRES = ('.jpg', '.jpeg', '.tif', '.tiff', '.png')
+MIN_PAIRES = 5
+
+
+class ErreurApp(Exception):
+    '''Erreur destinée à l'utilisateur : `cle` est une clé de traduction (i18n).'''
+
+    def __init__(self, cle, **params):
+        super().__init__(cle)
+        self.cle = cle
+        self.params = params
+
+
+def lister_paires(dossier):
+    '''Retourne (paires, sans_apres, sans_avant) d'après les noms de fichiers.
+    paires : liste de (raw, retouchee) ; les autres : listes de fichiers sans correspondant.'''
+    dossier = Path(dossier)
+
+    def _lire(sous, extensions):
+        d = dossier / sous
+        if not d.is_dir():
+            return {}
+        return {p.stem.lower(): p for p in sorted(d.iterdir())
+                if p.is_file() and p.suffix.lower() in extensions and not p.name.startswith('.')}
+
+    avant, apres = _lire('avant', EXT_RAW), _lire('apres', EXT_IMAGES)
+    paires = [(avant[k], apres[k]) for k in sorted(avant) if k in apres]
+    sans_apres = [avant[k] for k in sorted(avant) if k not in apres]
+    sans_avant = [apres[k] for k in sorted(apres) if k not in avant]
+    return paires, sans_apres, sans_avant
+
+
+def _chemin_info(chemin_modele):
+    return Path(chemin_modele).with_suffix('.json')
+
+
+def info_modele(chemin_modele):
+    '''Retourne {'date': ..., 'paires': ...} si un modèle existe, sinon None.'''
+    chemin_modele = Path(chemin_modele)
+    if not chemin_modele.exists():
+        return None
+    try:
+        return json.loads(_chemin_info(chemin_modele).read_text(encoding='utf-8'))
+    except Exception:
+        date = datetime.fromtimestamp(chemin_modele.stat().st_mtime).isoformat(timespec='seconds')
+        return {'date': date, 'paires': None}
 
 
 def lire_image(chemin):
@@ -70,36 +116,44 @@ def reglages_cibles(avant, apres, cadre):
     return [ev, a_ap - a_av, b_ap - b_av, nettete]
 
 
-def entrainer_depuis_exemples(dossier_exemples, chemin_modele, progression=print):
-    dossier = Path(dossier_exemples)
-    index = {p.stem: p for p in (dossier / 'apres').iterdir()
-             if p.suffix.lower() in EXT_APRES}
-    raws = sorted(p for p in (dossier / 'avant').iterdir() if p.is_file())
-    X, Y = [], []
-    for i, raw in enumerate(raws, 1):
-        retouche = index.get(raw.stem)
-        if retouche is None:
-            continue
+def entrainer_depuis_exemples(dossier_exemples, chemin_modele, rappel=None):
+    '''rappel(i, n, statut, nom, detail) avec statut 'ok', 'ignore' ou 'fin'.
+    Lève ErreurApp si les exemples sont insuffisants.'''
+    def _rappel(*args):
+        if rappel:
+            rappel(*args)
+
+    paires, _, _ = lister_paires(dossier_exemples)
+    if not paires:
+        raise ErreurApp('err_aucune_paire')
+    n = len(paires)
+    X, Y, ignorees = [], [], 0
+    for i, (raw, retouche) in enumerate(paires, 1):
         try:
             f_avant = vers_float(charger_raw(raw))
             f_apres = lire_image(retouche)
             cadre = trouver_cadre(f_avant, f_apres)
             if cadre is None:
-                progression(f'Paire ignorée (cadrage introuvable) : {raw.name}')
+                ignorees += 1
+                _rappel(i, n, 'ignore', raw.name, 'cadrage')
                 continue
             cibles = reglages_cibles(f_avant, f_apres, cadre)
             visages = detecter_visages(vers_uint8(miniature(f_avant, 768)))
             X.append(extraire_caracteristiques(miniature(f_avant, 256), visages))
             Y.append(cibles + list(cadre))
-            progression(f'Exemple appris {i}/{len(raws)} : {raw.name}')
+            _rappel(i, n, 'ok', raw.name, '')
         except Exception as e:
-            progression(f'Paire ignorée ({e}) : {raw.name}')
-    if len(X) < 5:
-        raise RuntimeError(f'Seulement {len(X)} paires exploitables : il en faut au moins 5 '
-                           '(idéalement 50 ou plus).')
+            ignorees += 1
+            _rappel(i, n, 'ignore', raw.name, str(e))
+    if len(X) < MIN_PAIRES:
+        raise ErreurApp('err_pas_assez_paires', n=len(X), minimum=MIN_PAIRES)
     ia = StyleIA()
     ia.entrainer(X, Y)
-    Path(chemin_modele).parent.mkdir(parents=True, exist_ok=True)
+    chemin_modele = Path(chemin_modele)
+    chemin_modele.parent.mkdir(parents=True, exist_ok=True)
     ia.sauver(chemin_modele)
-    progression(f'Entraînement terminé avec {len(X)} paires.')
+    info = {'date': datetime.now().isoformat(timespec='seconds'),
+            'paires': len(X), 'ignorees': ignorees}
+    _chemin_info(chemin_modele).write_text(json.dumps(info), encoding='utf-8')
+    _rappel(n, n, 'fin', '', str(len(X)))
     return len(X)
