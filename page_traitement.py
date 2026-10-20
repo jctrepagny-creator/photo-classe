@@ -11,11 +11,11 @@ import chemins
 import pipeline
 from dialogue_validation import DialogueValidation
 from i18n import t
-from lecture_raw import EXT_RAW
+from lecture_raw import EXT_TOUT
 from taches import TravailLot
 from widgets import Carte, PageBase, Segment, ZoneDepot, bouton, texte_discret
 
-FILTRE_RAW = 'RAW (' + ' '.join('*' + e for e in sorted(EXT_RAW)) + ')'
+FILTRE_RAW = 'Photos (' + ' '.join('*' + e for e in sorted(EXT_TOUT)) + ')'
 
 
 class PageTraitement(PageBase):
@@ -131,7 +131,7 @@ class PageTraitement(PageBase):
         return {f for s in self.sources for f, _ in s['elements']}
 
     def ajouter(self, chemins_deposes):
-        trouves = pipeline.collecter_raw(chemins_deposes)
+        trouves = pipeline.collecter_photos(chemins_deposes)
         deja = self._dejà_en_file()
         ajout = False
         for c in map(Path, chemins_deposes):

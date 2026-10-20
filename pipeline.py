@@ -13,7 +13,7 @@ import cv2
 
 from detection_visages import detecter_visages
 from ia_style import extraire_caracteristiques
-from lecture_raw import EXT_RAW, charger_raw
+from lecture_raw import EXT_IGNOREES, EXT_TOUT, charger_raw
 from traitement_image import (vers_float, vers_uint8, vers_uint16, miniature,
                               appliquer_cadrage, appliquer_reglages)
 
@@ -34,7 +34,9 @@ def collecter(chemins, extensions):
                             and not f.name.startswith(('.', '._')) and f not in vus):
                         vus.add(f)
                         elements.append((f, c))
-            elif c.is_file() and c.suffix.lower() in extensions and c not in vus:
+            elif (c.is_file() and c not in vus and not c.name.startswith('.')
+                  and (c.suffix.lower() in extensions or c.suffix.lower() not in EXT_IGNOREES)):
+                # un fichier déposé à la main est tenté même si son extension est inconnue
                 vus.add(c)
                 elements.append((c, None))
         except OSError:
@@ -42,8 +44,11 @@ def collecter(chemins, extensions):
     return elements
 
 
-def collecter_raw(chemins):
-    return collecter(chemins, EXT_RAW)
+def collecter_photos(chemins):
+    return collecter(chemins, EXT_TOUT)
+
+
+collecter_raw = collecter_photos
 
 
 # --- Noms de fichiers ---------------------------------------------------------

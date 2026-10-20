@@ -10,11 +10,11 @@ import chemins
 import bilan
 from entrainement import MIN_PAIRES, info_modele, lister_paires
 from i18n import t
-from lecture_raw import EXT_IMAGES, EXT_RAW
+from lecture_raw import EXT_IMAGES, EXT_TOUT
 from taches import Tache, TravailEntrainement, copier_vers
 from widgets import Carte, PageBase, ZoneDepot, bouton, texte_discret
 
-FILTRE_RAW = 'RAW (' + ' '.join('*' + e for e in sorted(EXT_RAW)) + ')'
+FILTRE_RAW = 'Photos (' + ' '.join('*' + e for e in sorted(EXT_TOUT)) + ')'
 FILTRE_IMG = 'Images (' + ' '.join('*' + e for e in sorted(EXT_IMAGES)) + ')'
 
 
@@ -30,7 +30,7 @@ class PageExemples(PageBase):
         zones.setSpacing(16)
         self.z_avant = ZoneDepot(t('depot_avant_titre'), t('depot_avant_sous'), FILTRE_RAW + ';;*')
         self.z_apres = ZoneDepot(t('depot_apres_titre'), t('depot_apres_sous'), FILTRE_IMG + ';;*')
-        self.z_avant.deposes.connect(lambda c: self._deposer(c, 'avant', EXT_RAW))
+        self.z_avant.deposes.connect(lambda c: self._deposer(c, 'avant', EXT_TOUT))
         self.z_apres.deposes.connect(lambda c: self._deposer(c, 'apres', EXT_IMAGES))
         zones.addWidget(self.z_avant, 1)
         zones.addWidget(self.z_apres, 1)

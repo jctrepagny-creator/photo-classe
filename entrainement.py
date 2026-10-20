@@ -13,7 +13,7 @@ import numpy as np
 
 from detection_visages import detecter_visages
 from ia_style import StyleIA, extraire_caracteristiques
-from lecture_raw import EXT_IMAGES, EXT_RAW, charger_raw
+from lecture_raw import EXT_IMAGES, EXT_TOUT, charger_raw
 from traitement_image import (vers_float, vers_uint8, miniature, appliquer_cadrage,
                               luminance_lineaire, lab_moyen, nettete_mesure)
 
@@ -41,7 +41,7 @@ def lister_paires(dossier):
         return {p.stem.lower(): p for p in sorted(d.iterdir())
                 if p.is_file() and p.suffix.lower() in extensions and not p.name.startswith('.')}
 
-    avant, apres = _lire('avant', EXT_RAW), _lire('apres', EXT_IMAGES)
+    avant, apres = _lire('avant', EXT_TOUT), _lire('apres', EXT_IMAGES)
     paires = [(avant[k], apres[k]) for k in sorted(avant) if k in apres]
     sans_apres = [avant[k] for k in sorted(avant) if k not in apres]
     sans_avant = [apres[k] for k in sorted(apres) if k not in avant]
