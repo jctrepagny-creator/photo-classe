@@ -32,10 +32,38 @@ def _lire_image(chemin):
     return (img.astype(np.uint16) * 257) if img.dtype == np.uint8 else img.astype(np.uint16)
 
 
+def _orientation(chemin):
+    """Sens de prise de vue lu dans le fichier RAW (1 = normal, 6 = portrait...)."""
+    try:
+        from PIL import Image
+        with Image.open(str(chemin)) as im:
+            return int(im.getexif().get(274, 1))
+    except Exception:
+        return 1
+
+
+def _redresser(img, o):
+    if o == 2:
+        return np.fliplr(img)
+    if o == 3:
+        return np.rot90(img, 2)
+    if o == 4:
+        return np.flipud(img)
+    if o == 5:
+        return np.transpose(img, (1, 0, 2))
+    if o == 6:
+        return np.rot90(img, -1)
+    if o == 7:
+        return np.rot90(np.transpose(img, (1, 0, 2)), 2)
+    if o == 8:
+        return np.rot90(img, 1)
+    return img
+
+
 def _apercu_integre(chemin):
     """Plan B : la plupart des RAW (NEF, CR3, ARW...) contiennent un grand JPEG d'aperçu.
-    On prend le plus grand JPEG lisible du fichier (utile pour les appareils trop récents
-    pour le décodeur RAW)."""
+    On prend le plus grand JPEG lisible du fichier (utile pour les appareils dont le format
+    n'est pas encore géré par le décodeur RAW, comme le NEF « haute efficacité » du Z 8)."""
     data = Path(chemin).read_bytes()
     meilleur, surface = None, 0
     debut, essais = 0, 0
@@ -45,12 +73,14 @@ def _apercu_integre(chemin):
             break
         debut = pos + 3
         essais += 1
-        img = cv2.imdecode(np.frombuffer(data[pos:], dtype=np.uint8), cv2.IMREAD_COLOR)
+        img = cv2.imdecode(np.frombuffer(data[pos:], dtype=np.uint8),
+                           cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
         if img is not None and img.shape[0] * img.shape[1] > surface:
             meilleur, surface = img, img.shape[0] * img.shape[1]
     if meilleur is None or surface < 500_000:      # moins d'un demi-mégapixel : trop petit
         raise ValueError('aperçu intégré introuvable')
-    return cv2.cvtColor(meilleur, cv2.COLOR_BGR2RGB).astype(np.uint16) * 257
+    rgb = cv2.cvtColor(meilleur, cv2.COLOR_BGR2RGB).astype(np.uint16) * 257
+    return np.ascontiguousarray(_redresser(rgb, _orientation(chemin)))
 
 
 def _texte_erreur(e):
