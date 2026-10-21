@@ -12,6 +12,7 @@ from pathlib import Path
 import cv2
 
 from detection_visages import detecter_visages
+from entrainement import ErreurApp
 from ia_style import extraire_caracteristiques
 from lecture_raw import EXT_IGNOREES, EXT_TOUT, charger_raw
 from traitement_image import (vers_float, vers_uint8, vers_uint16, miniature,
@@ -110,16 +111,34 @@ def lire_suivi(sortie):
     return suivi
 
 
+def verifier_sortie(sortie):
+    '''Vérifie qu'on peut écrire dans le dossier de sortie (sinon erreur claire).'''
+    sortie = Path(sortie)
+    try:
+        sortie.mkdir(parents=True, exist_ok=True)
+        test = sortie / '.test_ecriture'
+        test.write_text('ok')
+        test.unlink()
+    except OSError:
+        raise ErreurApp('err_sortie_inaccessible', dossier=str(sortie))
+
+
 def _noter(sortie, src, taille, resultat):
-    with open(Path(sortie) / FICHIER_SUIVI, 'a', encoding='utf-8') as f:
-        f.write(json.dumps({'src': str(src), 'taille': taille, 'sortie': str(resultat),
-                            'date': datetime.now().isoformat(timespec='seconds')},
-                           ensure_ascii=False) + '\n')
+    try:
+        with open(Path(sortie) / FICHIER_SUIVI, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({'src': str(src), 'taille': taille, 'sortie': str(resultat),
+                                'date': datetime.now().isoformat(timespec='seconds')},
+                               ensure_ascii=False) + '\n')
+    except OSError:
+        pass          # un journal illisible ne doit jamais interrompre le lot
 
 
 def _noter_erreur(sortie, raw, message):
-    with open(Path(sortie) / FICHIER_ERREURS, 'a', encoding='utf-8') as j:
-        j.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} | {raw} | {message}\n")
+    try:
+        with open(Path(sortie) / FICHIER_ERREURS, 'a', encoding='utf-8') as j:
+            j.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} | {raw} | {message}\n")
+    except OSError:
+        pass
 
 
 # --- Traitement ----------------------------------------------------------------
@@ -159,7 +178,7 @@ def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
     Les photos déjà traitées sont sautées : on peut relancer après une coupure.
     Les fichiers d'origine ne sont jamais modifiés ni supprimés.'''
     sortie = Path(config.dossier_sortie)
-    sortie.mkdir(parents=True, exist_ok=True)
+    verifier_sortie(sortie)
     suivi = lire_suivi(sortie)
     n = len(elements)
     ext = '.tif' if config.format_sortie == 'TIFF' else '.jpg'

@@ -10,6 +10,7 @@ import bilan
 import chemins
 import pipeline
 from dialogue_validation import DialogueValidation
+from entrainement import ErreurApp
 from i18n import t
 from lecture_raw import EXT_TOUT
 from taches import TravailLot
@@ -25,7 +26,7 @@ class PageTraitement(PageBase):
         self.sources = []            # [{'chemin': Path, 'elements': [(fichier, racine)]}]
         self.travail = None
 
-        self.zone = ZoneDepot(t('depot_raw_titre'), t('depot_raw_sous'), FILTRE_RAW + ';;*')
+        self.zone = ZoneDepot(t('depot_raw_titre'), t('depot_raw_sous'), 'Tous les fichiers (*.*);;' + FILTRE_RAW)
         self.zone.deposes.connect(self.ajouter)
         self.zone.dossier_utilise.connect(self._memoriser_dossier)
         self.corps.addWidget(self.zone)
@@ -182,6 +183,11 @@ class PageTraitement(PageBase):
     def changer_sortie(self):
         d = QFileDialog.getExistingDirectory(self, t('dossier_sortie'), str(self.ctx.config.dossier_sortie))
         if d:
+            try:
+                pipeline.verifier_sortie(d)
+            except ErreurApp as e:
+                QMessageBox.warning(self.window(), t('erreur'), t(e.cle, **e.params))
+                return
             self.ctx.config.dossier_sortie = Path(d)
             self.ctx.sauver_config()
             self.rafraichir()
@@ -216,6 +222,11 @@ class PageTraitement(PageBase):
             return
         if not self.ctx.config.modele_ia.exists():
             self.rafraichir()
+            return
+        try:
+            pipeline.verifier_sortie(self.ctx.config.dossier_sortie)
+        except ErreurApp as e:
+            QMessageBox.warning(self.window(), t('erreur'), t(e.cle, **e.params))
             return
         self.ctx.config.mode_automatique = (self.mode.index() == 0)
         self.ctx.sauver_config()

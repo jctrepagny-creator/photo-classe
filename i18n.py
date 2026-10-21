@@ -81,6 +81,7 @@ TEXTES = {
         'entrainement_en_cours': 'Entraînement en cours...', 'apprentissage_fin': 'Apprentissage du modèle...',
         'entrainement_ok': 'Terminé : le modèle a appris sur {n} paires.',
         'raison_cadrage': "recadrage introuvable (la version retouchée ne correspond pas)",
+        'err_sortie_inaccessible': "Impossible d'écrire dans le dossier de sortie : {dossier}\nChoisissez un dossier dans Images, Documents ou Bureau (bouton « Changer »). Évitez C:\\Users et la racine du disque C:.",
         'err_aucune_paire': "Aucune paire complète : déposez des photos RAW et leurs versions retouchées portant le même nom.",
         'err_pas_assez_paires': "Seulement {n} paire(s) exploitable(s) : il en faut au moins {minimum}.",
         # résultats
@@ -181,6 +182,7 @@ TEXTES = {
         'entrainement_en_cours': 'Training in progress...', 'apprentissage_fin': 'Learning the model...',
         'entrainement_ok': 'Done: the model learned from {n} pairs.',
         'raison_cadrage': 'crop not found (the retouched version does not match)',
+        'err_sortie_inaccessible': 'Cannot write to the output folder: {dossier}\nChoose a folder in Pictures, Documents or Desktop ("Change" button). Avoid C:\\Users and the root of drive C:.',
         'err_aucune_paire': 'No complete pair: drop RAW photos and their retouched versions with the same name.',
         'err_pas_assez_paires': 'Only {n} usable pair(s): at least {minimum} are needed.',
         'resultats_sous': 'Your processed photos. Drag them to a folder, an email... or copy their links.',

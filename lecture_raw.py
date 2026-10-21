@@ -33,22 +33,40 @@ def _lire_image(chemin):
     return (img.astype(np.uint16) * 257) if img.dtype == np.uint8 else img.astype(np.uint16)
 
 
+def _orientation_depuis(tete, debut):
+    e = '<' if tete[debut:debut + 2] == b'II' else '>'
+    if struct.unpack(e + 'H', tete[debut + 2:debut + 4])[0] != 42:
+        return None
+    pos = debut + struct.unpack(e + 'I', tete[debut + 4:debut + 8])[0]
+    n = struct.unpack(e + 'H', tete[pos:pos + 2])[0]
+    for i in range(min(n, 200)):
+        ent = tete[pos + 2 + 12 * i: pos + 14 + 12 * i]
+        if struct.unpack(e + 'H', ent[:2])[0] == 274:
+            v = struct.unpack(e + 'H', ent[8:10])[0]
+            return v if 1 <= v <= 8 else 1
+    return None
+
+
 def _orientation(chemin):
-    """Sens de prise de vue (balise EXIF 274 de l'en-tête TIFF du RAW) : 1 = normal, 6 = portrait..."""
+    """Sens de prise de vue (balise EXIF 274) : 1 = normal, 6 = portrait...
+    NEF/ARW/DNG : en-tête TIFF au début du fichier. CR3 : bloc EXIF enfoui plus loin."""
     try:
         with open(chemin, 'rb') as f:
             tete = f.read(1 << 20)
-        e = '<' if tete[:2] == b'II' else '>' if tete[:2] == b'MM' else None
-        if e is None or struct.unpack(e + 'H', tete[2:4])[0] != 42:
-            return 1
-        pos = struct.unpack(e + 'I', tete[4:8])[0]
-        n = struct.unpack(e + 'H', tete[pos:pos + 2])[0]
-        for i in range(n):
-            ent = tete[pos + 2 + 12 * i: pos + 14 + 12 * i]
-            tag = struct.unpack(e + 'H', ent[:2])[0]
-            if tag == 274:
-                v = struct.unpack(e + 'H', ent[8:10])[0]
-                return v if 1 <= v <= 8 else 1
+        if tete[:2] in (b'II', b'MM'):
+            v = _orientation_depuis(tete, 0)
+            if v:
+                return v
+        for marque in (b'II*\x00', b'MM\x00*'):
+            pos = tete.find(marque)
+            while 0 <= pos < len(tete) - 16:
+                try:
+                    v = _orientation_depuis(tete, pos)
+                except Exception:
+                    v = None
+                if v:
+                    return v
+                pos = tete.find(marque, pos + 4)
     except Exception:
         pass
     return 1

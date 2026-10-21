@@ -28,8 +28,8 @@ class PageExemples(PageBase):
 
         zones = QHBoxLayout()
         zones.setSpacing(16)
-        self.z_avant = ZoneDepot(t('depot_avant_titre'), t('depot_avant_sous'), FILTRE_RAW + ';;*')
-        self.z_apres = ZoneDepot(t('depot_apres_titre'), t('depot_apres_sous'), FILTRE_IMG + ';;*')
+        self.z_avant = ZoneDepot(t('depot_avant_titre'), t('depot_avant_sous'), 'Tous les fichiers (*.*);;' + FILTRE_RAW)
+        self.z_apres = ZoneDepot(t('depot_apres_titre'), t('depot_apres_sous'), 'Tous les fichiers (*.*);;' + FILTRE_IMG)
         self.z_avant.deposes.connect(lambda c: self._deposer(c, 'avant', EXT_TOUT))
         self.z_apres.deposes.connect(lambda c: self._deposer(c, 'apres', EXT_IMAGES))
         zones.addWidget(self.z_avant, 1)

@@ -2,11 +2,12 @@
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QSlider)
+from PySide6.QtWidgets import (QMessageBox, QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QSlider)
 
 import chemins
 import pipeline
 from i18n import t
+from entrainement import ErreurApp
 from version import VERSION
 from widgets import Carte, Interrupteur, PageBase, Segment, bouton, texte_discret
 
@@ -182,6 +183,11 @@ class PageReglages(PageBase):
     def _changer_dossier(self):
         d = QFileDialog.getExistingDirectory(self, t('dossier_sortie'), str(self.ctx.config.dossier_sortie))
         if d:
+            try:
+                pipeline.verifier_sortie(d)
+            except ErreurApp as e:
+                QMessageBox.warning(self.window(), t('erreur'), t(e.cle, **e.params))
+                return
             self.ctx.config.dossier_sortie = Path(d)
             self.l_dossier.setText(d)
             self._enregistrer()
