@@ -34,8 +34,13 @@ class StyleIA:
         self.modele.fit(np.array(X), np.array(Y))
         self.entraine = True
 
-    def predire(self, carac):
-        v = self.modele.predict(carac.reshape(1, -1))[0]
+    def predire(self, carac, marge_haut=0.6):
+        x = np.ascontiguousarray(carac.reshape(1, -1), dtype=np.float32)
+        arbres = np.array([e.predict(x, check_input=False)[0] for e in self.modele.estimators_])
+        v = arbres.mean(axis=0)
+        # cadre PRUDENT : pour le cadrage on prend le côté « large » des arbres (jamais trop serré)
+        bas, haut = np.percentile(arbres, [25, 75], axis=0)
+        v[4], v[5], v[6], v[7] = bas[4], bas[5], haut[6], haut[7]
         r = dict(zip(NOMS_SORTIES, map(float, v)))
         r['ev'] = float(np.clip(r['ev'], -2.0, 2.0))
         r['da'] = float(np.clip(r['da'], -30.0, 30.0))
@@ -47,6 +52,9 @@ class StyleIA:
         lw, lh = max(bx1 - bx0, 1e-3), max(by1 - by0, 1e-3)
         x0, y0 = bx0 + r['x0'] * lw, by0 + r['y0'] * lh
         x1, y1 = bx0 + r['x1'] * lw, by0 + r['y1'] * lh
+        if carac[10] >= 1:        # visage(s) trouvé(s) : on garde toujours de la place au-dessus de la tête
+            facteur = 1.0 if carac[10] < 2 else 0.35
+            y0 = min(y0, by0 - marge_haut * facteur * lh)
         x0, y0, x1, y1 = (min(max(v, 0.0), 1.0) for v in (x0, y0, x1, y1))
         if x1 - x0 < 0.3 or y1 - y0 < 0.3:
             x0, y0, x1, y1 = 0.0, 0.0, 1.0, 1.0

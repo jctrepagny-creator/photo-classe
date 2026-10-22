@@ -11,7 +11,7 @@ from pathlib import Path
 
 import cv2
 
-from detection_visages import detecter_visages
+from detection_visages import axe_du_visage, detecter_visages, haut_de_tete
 from entrainement import ErreurApp
 from ia_style import extraire_caracteristiques
 from lecture_raw import EXT_IGNOREES, EXT_TOUT, charger_raw
@@ -142,10 +142,48 @@ def _noter_erreur(sortie, raw, message):
 
 
 # --- Traitement ----------------------------------------------------------------
-def analyser(f, ia):
+def recentrer(cadre, axe):
+    '''Décale le cadre (sans changer sa taille) pour que `axe` soit au milieu.'''
+    x0, y0, x1, y1 = cadre
+    nl = x1 - x0
+    nx0 = min(max(axe - nl / 2, 0.0), 1.0 - nl)
+    return (nx0, y0, nx0 + nl, y1)
+
+
+def recadrer_sur_cheveux(cadre, visage, sommet, marge, dims, axe=None):
+    '''Place le haut du cadre à une distance constante au-dessus des cheveux
+    (marge = fraction de la hauteur de la tête) en gardant le format du cadre prévu.'''
+    h, w = dims[:2]
+    x0, y0, x1, y1 = cadre
+    haut_tete = visage[3] - sommet                    # sommet des cheveux -> menton
+    if haut_tete < 0.02:
+        return cadre
+    ny0 = max(0.0, sommet - marge * haut_tete)
+    if y1 - ny0 < 0.2:
+        return cadre
+    format_px = ((x1 - x0) * w) / max((y1 - y0) * h, 1)
+    nl = min(1.0, format_px * (y1 - ny0) * h / w)
+    cx = axe if axe is not None else (x0 + x1) / 2
+    nx0 = min(max(cx - nl / 2, 0.0), 1.0 - nl)
+    return (nx0, ny0, nx0 + nl, y1)
+
+
+def analyser(f, ia, marge_haut=0.6, marge_cheveux=18, centrer=True):
     '''Réglages propres à CETTE photo (jamais un réglage global pour le lot).'''
-    visages = detecter_visages(vers_uint8(miniature(f, 768)))
-    return ia.predire(extraire_caracteristiques(miniature(f, 256), visages))
+    mini = vers_uint8(miniature(f, 768))
+    visages = detecter_visages(mini)
+    r = ia.predire(extraire_caracteristiques(miniature(f, 256), visages), marge_haut)
+    if len(visages) == 1:
+        axe = axe_du_visage(mini, visages[0]) if centrer else None
+        sommet = haut_de_tete(mini, visages) if marge_cheveux >= 0 else None
+        if sommet is not None:
+            r['cadre'] = recadrer_sur_cheveux(r['cadre'], visages[0], sommet,
+                                              marge_cheveux / 100.0, f.shape, axe)
+            r['sommet'] = sommet
+        elif axe is not None:
+            r['cadre'] = recentrer(r['cadre'], axe)
+        r['axe'] = axe
+    return r
 
 
 def rendu(f, r):
@@ -199,7 +237,8 @@ def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
         rappel(i - 1, n, 'debut', raw.name, '')
         try:
             f = vers_float(charger_raw(raw))
-            r = analyser(f, ia)
+            r = analyser(f, ia, config.marge_haut / 100.0, config.marge_cheveux,
+                         config.centrer_visage)
             if not config.mode_automatique and valider is not None:
                 rep = valider(miniature(f, 900), r)
                 if isinstance(rep, str) and rep == 'STOP':

@@ -85,6 +85,26 @@ class PageReglages(PageBase):
         self.mode = Segment([t('mode_auto'), t('mode_manuel')])
         self.mode.change.connect(self._mode)
         c.ajouter_layout(_ligne(t('reg_mode_defaut'), self.mode))
+        rang = QHBoxLayout()
+        rang.setSpacing(12)
+        etiquette = QLabel(t('reg_marge_haut'))
+        etiquette.setMinimumWidth(210)
+        rang.addWidget(etiquette)
+        self.marge = QSlider(Qt.Orientation.Horizontal)
+        self.marge.setRange(0, 60)
+        self.marge.setSingleStep(5)
+        self.marge.setFixedWidth(240)
+        self.marge.valueChanged.connect(self._marge)
+        self.l_marge = QLabel('')
+        rang.addWidget(self.marge)
+        rang.addWidget(self.l_marge)
+        rang.addStretch(1)
+        c.ajouter_layout(rang)
+        c.ajouter(texte_discret(t('reg_marge_haut_aide')))
+        self.sw_centrer = Interrupteur()
+        self.sw_centrer.toggled.connect(self._centrer)
+        c.ajouter_layout(_ligne(t('reg_centrer'), self.sw_centrer))
+        c.ajouter(texte_discret(t('reg_centrer_aide')))
         self.corps.addWidget(c)
 
         # --- Application
@@ -134,6 +154,9 @@ class PageReglages(PageBase):
         self.modele.setText(cfg.modele_renommage)
         self.modele.setEnabled(cfg.renommer_fichiers)
         self.mode.set_index(0 if cfg.mode_automatique else 1)
+        self.sw_centrer.setChecked(cfg.centrer_visage)
+        self.marge.setValue(int(cfg.marge_cheveux))
+        self.l_marge.setText(f'{int(cfg.marge_cheveux)} %')
         self.langue.setCurrentIndex(max(0, self.langue.findData(cfg.langue)))
         self.sw_maj.setChecked(cfg.maj_auto)
         self._chargement = False
@@ -208,6 +231,15 @@ class PageReglages(PageBase):
 
     def _mode(self, i):
         self.ctx.config.mode_automatique = (i == 0)
+        self._enregistrer()
+
+    def _centrer(self, v):
+        self.ctx.config.centrer_visage = bool(v)
+        self._enregistrer()
+
+    def _marge(self, v):
+        self.l_marge.setText(f'{v} %')
+        self.ctx.config.marge_cheveux = int(v)
         self._enregistrer()
 
     def _langue(self, _i):
