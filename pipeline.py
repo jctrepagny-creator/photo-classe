@@ -11,15 +11,18 @@ from pathlib import Path
 
 import cv2
 
-from detection_visages import axe_du_visage, detecter_visages, haut_de_tete
+from detection_visages import axe_du_visage, boite_groupe, detecter_visages, haut_de_tete
 from entrainement import ErreurApp
 from ia_style import extraire_caracteristiques
+import lecture_raw
 from lecture_raw import EXT_IGNOREES, EXT_TOUT, charger_raw
+import numpy as np
 from traitement_image import (vers_float, vers_uint8, vers_uint16, miniature,
                               appliquer_cadrage, appliquer_reglages)
 
 FICHIER_SUIVI = '.traitees.jsonl'   # une ligne par photo terminée (reprise après coupure)
 FICHIER_ERREURS = 'journal.txt'
+FICHIER_REGLAGES = 'reglages.csv'
 DOSSIER_RAW = 'originaux_raw'
 
 
@@ -123,12 +126,15 @@ def verifier_sortie(sortie):
         raise ErreurApp('err_sortie_inaccessible', dossier=str(sortie))
 
 
-def _noter(sortie, src, taille, resultat):
+def _noter(sortie, src, taille, resultat, reglages=None):
     try:
         with open(Path(sortie) / FICHIER_SUIVI, 'a', encoding='utf-8') as f:
-            f.write(json.dumps({'src': str(src), 'taille': taille, 'sortie': str(resultat),
-                                'date': datetime.now().isoformat(timespec='seconds')},
-                               ensure_ascii=False) + '\n')
+            ligne = {'src': str(src), 'taille': taille, 'sortie': str(resultat),
+                     'date': datetime.now().isoformat(timespec='seconds')}
+            if reglages is not None:
+                ligne['reglages'] = {k: (list(reglages[k]) if k == 'cadre' else float(reglages[k]))
+                                     for k in ('ev', 'da', 'db', 'nettete', 'cadre')}
+            f.write(json.dumps(ligne, ensure_ascii=False) + '\n')
     except OSError:
         pass          # un journal illisible ne doit jamais interrompre le lot
 
@@ -142,6 +148,35 @@ def _noter_erreur(sortie, raw, message):
 
 
 # --- Traitement ----------------------------------------------------------------
+def limiter_surexposition(f, cadre, ev, plafond=0.97):
+    '''Empêche de « brûler » les blancs : l'exposition est réduite si les hautes lumières
+    (97e centile) dépasseraient `plafond` après correction.'''
+    zone = appliquer_cadrage(miniature(f, 256), cadre)
+    lum = 0.2126 * zone[..., 0] + 0.7152 * zone[..., 1] + 0.0722 * zone[..., 2]
+    haute = float(np.percentile(lum, 97)) ** 2.2
+    if haute < 1e-4:
+        return ev, False
+    maxi = float(np.log2(plafond ** 2.2 / haute))
+    return (maxi, True) if ev > maxi else (ev, False)
+
+
+def _noter_reglages(sortie, nom, r):
+    '''Une ligne par photo dans reglages.csv : sert à comprendre / corriger les résultats.'''
+    chemin = Path(sortie) / FICHIER_REGLAGES
+    try:
+        nouveau = not chemin.exists()
+        with open(chemin, 'a', encoding='utf-8') as f:
+            if nouveau:
+                f.write('fichier;source;ev;da;db;nettete;x0;y0;x1;y1;sommet;axe;ev_limite\n')
+            c = r['cadre']
+            f.write(';'.join(str(v) for v in (
+                nom, lecture_raw.derniere_source, f"{r['ev']:.2f}", f"{r['da']:.1f}", f"{r['db']:.1f}",
+                f"{r['nettete']:.2f}", *(f'{v:.3f}' for v in c), f"{r.get('sommet', -1):.3f}",
+                f"{r.get('axe') if r.get('axe') is not None else -1:.3f}", int(r.get('ev_limite', False)))) + '\n')
+    except OSError:
+        pass
+
+
 def recentrer(cadre, axe):
     '''Décale le cadre (sans changer sa taille) pour que `axe` soit au milieu.'''
     x0, y0, x1, y1 = cadre
@@ -150,16 +185,14 @@ def recentrer(cadre, axe):
     return (nx0, y0, nx0 + nl, y1)
 
 
-def recadrer_sur_cheveux(cadre, visage, sommet, marge, dims, axe=None):
-    '''Place le haut du cadre à une distance constante au-dessus des cheveux
-    (marge = fraction de la hauteur de la tête) en gardant le format du cadre prévu.'''
+def recadrer_sur_cheveux(cadre, sommet, marge, dims, axe=None):
+    '''Place le haut du cadre pour que l'espace au-dessus des cheveux soit TOUJOURS le même
+    fraction `marge` de la hauteur de la photo finale. Le format du cadre prévu est conservé.'''
     h, w = dims[:2]
     x0, y0, x1, y1 = cadre
-    haut_tete = visage[3] - sommet                    # sommet des cheveux -> menton
-    if haut_tete < 0.02:
-        return cadre
-    ny0 = max(0.0, sommet - marge * haut_tete)
-    if y1 - ny0 < 0.2:
+    marge = min(max(marge, 0.0), 0.4)
+    ny0 = max(0.0, (sommet - marge * y1) / (1.0 - marge))      # sommet - ny0 = marge * (y1 - ny0)
+    if y1 - ny0 < 0.2 or sommet <= ny0 - 1e-9:
         return cadre
     format_px = ((x1 - x0) * w) / max((y1 - y0) * h, 1)
     nl = min(1.0, format_px * (y1 - ny0) * h / w)
@@ -168,27 +201,48 @@ def recadrer_sur_cheveux(cadre, visage, sommet, marge, dims, axe=None):
     return (nx0, ny0, nx0 + nl, y1)
 
 
-def analyser(f, ia, marge_haut=0.6, marge_cheveux=18, centrer=True):
+def analyser(f, ia, marge_haut=0.6, marge_photo=6, centrer=True):
     '''Réglages propres à CETTE photo (jamais un réglage global pour le lot).'''
     mini = vers_uint8(miniature(f, 768))
     visages = detecter_visages(mini)
     r = ia.predire(extraire_caracteristiques(miniature(f, 256), visages), marge_haut)
-    if len(visages) == 1:
-        axe = axe_du_visage(mini, visages[0]) if centrer else None
-        sommet = haut_de_tete(mini, visages) if marge_cheveux >= 0 else None
+    if visages:
+        if not centrer:
+            axe = None
+        elif len(visages) == 1:
+            axe = axe_du_visage(mini, visages[0])
+        else:
+            b = boite_groupe(visages)               # plusieurs enfants : milieu du groupe
+            axe = (b[0] + b[2]) / 2
+        sommet = haut_de_tete(mini, visages) if marge_photo >= 0 else None
         if sommet is not None:
-            r['cadre'] = recadrer_sur_cheveux(r['cadre'], visages[0], sommet,
-                                              marge_cheveux / 100.0, f.shape, axe)
+            r['cadre'] = recadrer_sur_cheveux(r['cadre'], sommet, marge_photo / 100.0, f.shape, axe)
             r['sommet'] = sommet
         elif axe is not None:
             r['cadre'] = recentrer(r['cadre'], axe)
         r['axe'] = axe
+    r['ev'], r['ev_limite'] = limiter_surexposition(f, r['cadre'], r['ev'])
     return r
 
 
 def rendu(f, r):
     zone = appliquer_cadrage(f, r['cadre'])
     return appliquer_reglages(zone, r['ev'], r['da'], r['db'], r['nettete'])
+
+
+def ecrire_image(img, chemin, qualite=95):
+    '''Écrit `img` (float RGB) au chemin exact ; le format suit l'extension (.tif = 16 bits).'''
+    chemin = Path(chemin)
+    if chemin.suffix.lower() in ('.tif', '.tiff'):
+        data, params = vers_uint16(img), []
+    else:
+        data, params = vers_uint8(img), [cv2.IMWRITE_JPEG_QUALITY, int(qualite)]
+    ok, tampon = cv2.imencode(chemin.suffix.lower(), cv2.cvtColor(data, cv2.COLOR_RGB2BGR), params)
+    if not ok:
+        raise RuntimeError('Encodage impossible')
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    tampon.tofile(str(chemin))
+    return chemin
 
 
 def exporter(img, base, config):
@@ -237,8 +291,9 @@ def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
         rappel(i - 1, n, 'debut', raw.name, '')
         try:
             f = vers_float(charger_raw(raw))
-            r = analyser(f, ia, config.marge_haut / 100.0, config.marge_cheveux,
+            r = analyser(f, ia, config.marge_haut / 100.0, config.marge_haut_photo,
                          config.centrer_visage)
+            _noter_reglages(sortie, raw.name, r)
             if not config.mode_automatique and valider is not None:
                 rep = valider(miniature(f, 900), r)
                 if isinstance(rep, str) and rep == 'STOP':
@@ -261,7 +316,7 @@ def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 if not dest.exists():
                     shutil.copy2(raw, dest)
-            _noter(sortie, raw, taille, cree)
+            _noter(sortie, raw, taille, cree, r)
             rappel(i, n, 'ok', raw.name, str(cree))
         except Exception as e:
             message = str(e) or type(e).__name__

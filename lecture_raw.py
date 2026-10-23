@@ -118,19 +118,27 @@ def _texte_erreur(e):
     return m.decode('utf-8', 'replace') if isinstance(m, bytes) else str(m)
 
 
+derniere_source = ''      # 'raw', 'apercu' ou 'image' : sert au journal de diagnostic
+
+
 def charger_raw(chemin) -> np.ndarray:
     """Retourne une image RGB (uint16) : RAW décodé, sinon aperçu intégré, ou image ordinaire."""
+    global derniere_source
     if Path(chemin).suffix.lower() in EXT_IMAGES:
+        derniere_source = 'image'
         return _lire_image(chemin)
     import rawpy
     try:
         with rawpy.imread(str(chemin)) as raw:
-            return raw.postprocess(use_camera_wb=True, no_auto_bright=True, output_bps=16)
+            img = raw.postprocess(use_camera_wb=True, no_auto_bright=True, output_bps=16)
+        derniere_source = 'raw'
+        return img
     except Exception as erreur_raw:
         for plan_b in (_apercu_integre, _lire_image):  # aperçu du RAW, puis image déguisée
             try:
                 img = plan_b(chemin)
                 if img.shape[0] * img.shape[1] >= 500_000:   # évite une simple vignette
+                    derniere_source = 'apercu' if plan_b is _apercu_integre else 'image'
                     return img
             except Exception:
                 pass

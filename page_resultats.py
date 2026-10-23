@@ -8,8 +8,10 @@ from PySide6.QtWidgets import (QAbstractItemView, QFileDialog, QHBoxLayout, QLab
 
 import bilan
 import chemins
+import recadrage
+from dialogue_recadrage import DialogueRecadrage
 from i18n import t
-from taches import Tache, TravailVignettes, creer_zip
+from taches import Tache, TravailVignettes, charger_vignette, creer_zip
 from widgets import Carte, PageBase, bouton, texte_discret
 
 ROLE_CHEMIN = Qt.ItemDataRole.UserRole
@@ -62,6 +64,9 @@ class PageResultats(PageBase):
         self.l_compte = QLabel('')
         self.l_compte.setObjectName('Discret')
         actions.addWidget(self.l_compte, 1)
+        self.b_recadrer = bouton(t('recadrer_selection'), 'fleche')
+        self.b_recadrer.clicked.connect(self.recadrer_selection)
+        actions.addWidget(self.b_recadrer)
         self.b_chemins = bouton(t('copier_chemins'), 'copie')
         self.b_fichiers = bouton(t('copier_fichiers'), 'copie')
         self.b_zip = bouton(t('creer_zip'), 'zip')
@@ -89,7 +94,7 @@ class PageResultats(PageBase):
         self.liste.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
         self.liste.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.liste.customContextMenuRequested.connect(self._menu)
-        self.liste.itemDoubleClicked.connect(lambda it: self._ouvrir(it.data(ROLE_CHEMIN)))
+        self.liste.itemDoubleClicked.connect(lambda it: self.recadrer(it.data(ROLE_CHEMIN)))
         self.corps.addWidget(self.liste, 1)
 
         self.b_plus = bouton(t('afficher_plus'))
@@ -161,7 +166,7 @@ class PageResultats(PageBase):
         self.liste.setVisible(not vide)
         self.l_astuce.setVisible(not vide)
         self.b_plus.setVisible(len(self.filtres) > self.limite)
-        for b in (self.b_chemins, self.b_fichiers, self.b_zip):
+        for b in (self.b_recadrer, self.b_chemins, self.b_fichiers, self.b_zip):
             b.setEnabled(not vide)
         if montres:
             self._vignettes = TravailVignettes(montres, self)
@@ -222,6 +227,29 @@ class PageResultats(PageBase):
         self.b_zip.setEnabled(True)
         QMessageBox.warning(self.window(), t('erreur'), message)
 
+    def recadrer_selection(self):
+        sel = self.liste.selectedItems()
+        if len(sel) != 1:
+            self.l_compte.setText(t('choisir_une_photo'))
+            return
+        self.recadrer(sel[0].data(ROLE_CHEMIN))
+
+    def recadrer(self, chemin):
+        if self.ctx.occupation == 'lot':
+            QMessageBox.information(self.window(), t('recadrer'), t('recadrage_occupe'))
+            return
+        enreg = recadrage.trouver_enregistrement(self.ctx.config.dossier_sortie, chemin)
+        if not enreg or not Path(enreg['src']).exists():
+            QMessageBox.warning(self.window(), t('erreur'), t('err_original_introuvable'))
+            return
+        dlg = DialogueRecadrage(self.ctx.config, chemin, enreg, self.window())
+        if dlg.exec() == DialogueRecadrage.DialogCode.Accepted:
+            it = self._items.get(str(chemin))
+            img = charger_vignette(chemin)
+            if it is not None and img is not None:
+                it.setIcon(QIcon(QPixmap.fromImage(img)))
+            self.l_compte.setText(t('recadrage_ok'))
+
     def _ouvrir(self, chemin):
         QDesktopServices.openUrl(QUrl.fromLocalFile(chemin))
 
@@ -231,11 +259,14 @@ class PageResultats(PageBase):
             return
         chemin = it.data(ROLE_CHEMIN)
         menu = QMenu(self)
+        a0 = menu.addAction(t('recadrer'))
         a1 = menu.addAction(t('ouvrir_photo'))
         a2 = menu.addAction(t('afficher_dans_dossier'))
         a3 = menu.addAction(t('copier_chemin'))
         choix = menu.exec(self.liste.viewport().mapToGlobal(pos))
-        if choix == a1:
+        if choix == a0:
+            self.recadrer(chemin)
+        elif choix == a1:
             self._ouvrir(chemin)
         elif choix == a2:
             chemins.afficher_dans_dossier(chemin)

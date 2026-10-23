@@ -91,7 +91,7 @@ class PageReglages(PageBase):
         etiquette.setMinimumWidth(210)
         rang.addWidget(etiquette)
         self.marge = QSlider(Qt.Orientation.Horizontal)
-        self.marge.setRange(0, 60)
+        self.marge.setRange(0, 25)
         self.marge.setSingleStep(5)
         self.marge.setFixedWidth(240)
         self.marge.valueChanged.connect(self._marge)
@@ -155,8 +155,8 @@ class PageReglages(PageBase):
         self.modele.setEnabled(cfg.renommer_fichiers)
         self.mode.set_index(0 if cfg.mode_automatique else 1)
         self.sw_centrer.setChecked(cfg.centrer_visage)
-        self.marge.setValue(int(cfg.marge_cheveux))
-        self.l_marge.setText(f'{int(cfg.marge_cheveux)} %')
+        self.marge.setValue(int(cfg.marge_haut_photo))
+        self.l_marge.setText(f'{int(cfg.marge_haut_photo)} %')
         self.langue.setCurrentIndex(max(0, self.langue.findData(cfg.langue)))
         self.sw_maj.setChecked(cfg.maj_auto)
         self._chargement = False
@@ -239,7 +239,7 @@ class PageReglages(PageBase):
 
     def _marge(self, v):
         self.l_marge.setText(f'{v} %')
-        self.ctx.config.marge_cheveux = int(v)
+        self.ctx.config.marge_haut_photo = int(v)
         self._enregistrer()
 
     def _langue(self, _i):

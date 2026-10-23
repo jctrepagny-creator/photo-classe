@@ -16,7 +16,7 @@ class AppConfig:
     renommer_fichiers: bool = True
     modele_renommage: str = 'classe_{index:04d}'
     centrer_visage: bool = True          # nez au milieu de la photo
-    marge_cheveux: int = 18              # espace au-dessus des cheveux, en % de la hauteur de la tête
+    marge_haut_photo: int = 6            # espace au-dessus des cheveux, en % de la hauteur de la photo finale
     marge_haut: int = 60                 # marge minimale au-dessus de la tête, en % de la hauteur du visage
     mode_automatique: bool = True        # False = validation photo par photo
     modele_ia: Path = dossier_donnees() / 'modele' / 'style.pt'
