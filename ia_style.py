@@ -30,8 +30,8 @@ class StyleIA:
                                           n_jobs=-1, random_state=0)
         self.entraine = False
 
-    def entrainer(self, X, Y):
-        self.modele.fit(np.array(X), np.array(Y))
+    def entrainer(self, X, Y, poids=None):
+        self.modele.fit(np.array(X, dtype=np.float32), np.array(Y, dtype=np.float64), sample_weight=poids)
         self.entraine = True
 
     def predire(self, carac, marge_haut=0.6):

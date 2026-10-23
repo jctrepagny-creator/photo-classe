@@ -6,9 +6,11 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QAbstractItemView, QHBoxLayout, QHeaderView, QLabel, QMessageBox,
                                QPlainTextEdit, QProgressBar, QTableWidget, QTableWidgetItem)
 
-import chemins
 import bilan
-from entrainement import MIN_PAIRES, info_modele, lister_paires
+import chemins
+import corrections
+from entrainement import (MIN_PAIRES, chemin_precedent, info_modele, lister_paires,
+                          restaurer_precedent)
 from i18n import t
 from lecture_raw import EXT_IMAGES, EXT_TOUT
 from taches import Tache, TravailEntrainement, copier_vers
@@ -71,11 +73,16 @@ class PageExemples(PageBase):
         carte = Carte(t('entrainement_titre'))
         self.l_modele = QLabel('')
         carte.ajouter(self.l_modele)
+        self.l_corr = QLabel('')
+        carte.ajouter(self.l_corr)
         self.l_aide = texte_discret('')
         carte.ajouter(self.l_aide)
         self.b_entrainer = bouton(t('entrainer'), 'traitement', principal=True)
         self.b_entrainer.clicked.connect(self.entrainer)
         carte.ajouter(self.b_entrainer, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.b_restaurer = bouton(t('restaurer_modele'), lien=True)
+        self.b_restaurer.clicked.connect(self.restaurer)
+        carte.ajouter(self.b_restaurer, alignment=Qt.AlignmentFlag.AlignLeft)
         self.barre = QProgressBar()
         self.barre.hide()
         carte.ajouter(self.barre)
@@ -149,10 +156,14 @@ class PageExemples(PageBase):
                                     n=info.get('paires') or '?'))
         else:
             self.l_modele.setText(t('modele_absent'))
-        if n < MIN_PAIRES:
-            self.l_aide.setText(t('aide_min_paires', n=n, minimum=MIN_PAIRES))
+        total_corr = len(corrections.lire())
+        attente = corrections.en_attente(info.get('date') if info else None)
+        self.l_corr.setText(t('corrections_etat', n=total_corr, attente=attente))
+        n_total = n + total_corr
+        if n_total < MIN_PAIRES:
+            self.l_aide.setText(t('aide_min_paires', n=n_total, minimum=MIN_PAIRES))
         else:
-            self.l_aide.setText(t('aide_pret', n=n))
+            self.l_aide.setText(t('aide_pret', n=n_total))
         self._etat_boutons()
 
     def occupation_changee(self, occupation):
@@ -165,7 +176,9 @@ class PageExemples(PageBase):
         self.b_retirer.setEnabled(libre)
         self.b_vider.setEnabled(libre)
         paires, _, _ = lister_paires(chemins.dossier_exemples())
-        self.b_entrainer.setEnabled(libre and len(paires) >= MIN_PAIRES)
+        self.b_entrainer.setEnabled(libre and len(paires) + len(corrections.lire()) >= MIN_PAIRES)
+        self.b_restaurer.setVisible(chemin_precedent(self.ctx.config.modele_ia).exists())
+        self.b_restaurer.setEnabled(libre)
         self.b_entrainer.setVisible(self.ctx.occupation != 'entrainement')
 
     # -- suppression (uniquement les COPIES gardées par l'application)
@@ -193,6 +206,12 @@ class PageExemples(PageBase):
                 except OSError:
                     pass
         self.rafraichir()
+
+    def restaurer(self):
+        rep = QMessageBox.question(self.window(), t('confirmer'), t('restaurer_confirm'))
+        if rep == QMessageBox.StandardButton.Yes and restaurer_precedent(self.ctx.config.modele_ia):
+            self.l_etat.setText(t('modele_restaure'))
+            self.rafraichir()
 
     # -- entraînement
     def entrainer(self):

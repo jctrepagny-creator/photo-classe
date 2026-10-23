@@ -1,13 +1,16 @@
-'''Recadrage manuel d'une photo déjà traitée : on repart de l'ORIGINAL (RAW/JPEG)
-avec les mêmes réglages de couleur, et on remplace le fichier produit.'''
+'''Correction manuelle d'une photo déjà traitée : on repart de l'ORIGINAL (RAW/JPEG),
+on peut changer cadre, exposition, teinte et netteté, et on remplace le fichier produit.
+La correction est mémorisée (proposition de l'IA + décision) pour réentraîner l'IA.'''
 import os
 from pathlib import Path
 
+import corrections
+from detection_visages import detecter_visages
 from entrainement import ErreurApp
-from ia_style import StyleIA
+from ia_style import StyleIA, extraire_caracteristiques
 from lecture_raw import charger_raw
 from pipeline import _noter, analyser, ecrire_image, lire_suivi, rendu
-from traitement_image import appliquer_reglages, miniature, vers_float, vers_uint8
+from traitement_image import miniature, vers_float, vers_uint8
 
 CLES = ('ev', 'da', 'db', 'nettete')
 
@@ -22,26 +25,37 @@ def trouver_enregistrement(sortie, chemin):
     return trouve
 
 
+def _propre(r):
+    out = {k: float(r[k]) for k in CLES}
+    out['cadre'] = tuple(float(v) for v in r['cadre'])
+    return out
+
+
 def preparer(config, source, reglages):
-    '''Charge l'original et prépare un aperçu en couleurs (grande miniature).
-    `reglages` peut être None (anciens fichiers) : l'IA les recalcule.'''
+    '''Charge l'original : grande miniature (pour l'aperçu en direct), réglages proposés par
+    l'IA et mesures de la photo. `reglages` peut être None (anciens fichiers).'''
     if not Path(source).exists():
         raise ErreurApp('err_original_introuvable', fichier=str(source))
     f = vers_float(charger_raw(source))
+    visages = detecter_visages(vers_uint8(miniature(f, 768)))
+    carac = [float(v) for v in extraire_caracteristiques(miniature(f, 256), visages)]
     if reglages is None:
         ia = StyleIA.charger(config.modele_ia)
         reglages = analyser(f, ia, config.marge_haut / 100.0, config.marge_haut_photo, config.centrer_visage)
-    r = {k: float(reglages[k]) for k in CLES}
-    r['cadre'] = tuple(float(v) for v in reglages['cadre'])
-    apercu = vers_uint8(appliquer_reglages(miniature(f, 1400), r['ev'], r['da'], r['db'], 0.0))
-    return {'apercu': apercu, 'reglages': r, 'dims': f.shape[:2]}
+    return {'mini': miniature(f, 1100), 'reglages': _propre(reglages), 'dims': f.shape[:2],
+            'carac': carac}
 
 
-def enregistrer(config, source, reglages, cadre, chemin):
-    '''Refait le rendu complet avec le nouveau cadre et remplace le fichier produit.'''
+def enregistrer(config, source, propose, decide, chemin, carac, apprendre=True):
+    '''Refait le rendu complet avec la décision et remplace le fichier produit.
+    Si quelque chose a changé, la correction est mémorisée pour l'apprentissage.'''
+    decide = _propre(decide)
     f = vers_float(charger_raw(source))
-    r = dict(reglages)
-    r['cadre'] = tuple(float(v) for v in cadre)
-    ecrire_image(rendu(f, r), chemin, config.qualite_jpeg)
-    _noter(config.dossier_sortie, source, Path(source).stat().st_size, chemin, r)
+    ecrire_image(rendu(f, decide), chemin, config.qualite_jpeg)
+    _noter(config.dossier_sortie, source, Path(source).stat().st_size, chemin, decide)
+    propose = _propre(propose)
+    change = any(abs(decide[k] - propose[k]) > 1e-3 for k in CLES) or any(
+        abs(a - b) > 5e-3 for a, b in zip(decide['cadre'], propose['cadre']))
+    if change:
+        corrections.enregistrer(source, carac, propose, decide, apprendre)
     return str(chemin)

@@ -112,6 +112,10 @@ class FenetrePrincipale(QMainWindow):
         self.pile.setCurrentWidget(self.pages[cle])
         self.pages[cle].rafraichir()
 
+    def lancer_entrainement(self):
+        self.aller('exemples')
+        self.pages['exemples'].entrainer()
+
     def definir_occupation(self, occupation):
         self.occupation = occupation
         for p in self.pages.values():

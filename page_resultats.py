@@ -8,7 +8,9 @@ from PySide6.QtWidgets import (QAbstractItemView, QFileDialog, QHBoxLayout, QLab
 
 import bilan
 import chemins
+import corrections
 import recadrage
+from entrainement import info_modele
 from dialogue_recadrage import DialogueRecadrage
 from i18n import t
 from taches import Tache, TravailVignettes, charger_vignette, creer_zip
@@ -44,6 +46,7 @@ class PageResultats(PageBase):
         self._vignettes = None
         self._anciens = []
         self._taches = []
+        self._seuil = corrections.SEUIL_PROPOSITION
         self._vide_pm = self._pixmap_vide()
 
         barre = QHBoxLayout()
@@ -249,6 +252,18 @@ class PageResultats(PageBase):
             if it is not None and img is not None:
                 it.setIcon(QIcon(QPixmap.fromImage(img)))
             self.l_compte.setText(t('recadrage_ok'))
+            self._proposer_apprentissage()
+
+    def _proposer_apprentissage(self):
+        info = info_modele(self.ctx.config.modele_ia)
+        attente = corrections.en_attente(info.get('date') if info else None)
+        if attente < self._seuil or self.ctx.occupation:
+            return
+        rep = QMessageBox.question(self.window(), t('maj_ia_titre'), t('maj_ia_question', n=attente))
+        if rep == QMessageBox.StandardButton.Yes:
+            self.ctx.lancer_entrainement()
+        else:
+            self._seuil = attente + corrections.SEUIL_PROPOSITION      # on ne redemande pas tout de suite
 
     def _ouvrir(self, chemin):
         QDesktopServices.openUrl(QUrl.fromLocalFile(chemin))

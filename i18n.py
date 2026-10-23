@@ -18,6 +18,13 @@ def t(cle, **params):
 
 TEXTES = {
     'fr': {
+        'apprendre_correction': "Apprendre de cette correction",
+        'corrections_etat': "Corrections manuelles mémorisées : {n} (dont {attente} pas encore apprises).",
+        'maj_ia_titre': "Mettre à jour l'IA ?",
+        'maj_ia_question': "{n} corrections manuelles ne sont pas encore apprises. Mettre à jour l'IA maintenant ? (quelques minutes ; l'ancien modèle est gardé en secours)",
+        'restaurer_modele': 'Revenir au modèle précédent',
+        'restaurer_confirm': "Revenir au modèle d'avant le dernier entraînement ?",
+        'modele_restaure': 'Modèle précédent restauré.',
         'recadrer': 'Recadrer...', 'recadrer_selection': 'Recadrer', 'annuler': 'Annuler', 'enregistrer': 'Enregistrer',
         'retablir': 'Rétablir', 'garder_format': 'Garder le format', 'taille_px': '{w} x {h} px',
         'recadrage_titre': 'Recadrer la photo', 'recadrage_charge': "Chargement de l'original...",
@@ -136,6 +143,13 @@ TEXTES = {
         'valid_arreter': 'Arrêter le lot',
     },
     'en': {
+        'apprendre_correction': 'Learn from this correction',
+        'corrections_etat': 'Manual corrections stored: {n} ({attente} not learned yet).',
+        'maj_ia_titre': 'Update the AI?',
+        'maj_ia_question': '{n} manual corrections are not learned yet. Update the AI now? (a few minutes; the previous model is kept as a backup)',
+        'restaurer_modele': 'Go back to the previous model',
+        'restaurer_confirm': 'Go back to the model from before the last training?',
+        'modele_restaure': 'Previous model restored.',
         'recadrer': 'Crop...', 'recadrer_selection': 'Crop', 'annuler': 'Cancel', 'enregistrer': 'Save',
         'retablir': 'Reset', 'garder_format': 'Keep the ratio', 'taille_px': '{w} x {h} px',
         'recadrage_titre': 'Crop the photo', 'recadrage_charge': 'Loading the original...',

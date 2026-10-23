@@ -5,12 +5,15 @@ Organisation du dossier d'exemples (gérée par l'application, page « Exemples 
     apres/IMG_0001.jpg   (la même photo retouchée par vous, même nom)
 '''
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 
 import cv2
 import numpy as np
 
+import corrections
+from chemins import dossier_donnees
 from detection_visages import boite_groupe, detecter_visages
 from ia_style import StyleIA, extraire_caracteristiques
 from lecture_raw import EXT_IMAGES, EXT_TOUT, charger_raw
@@ -18,6 +21,8 @@ from traitement_image import (vers_float, vers_uint8, miniature, appliquer_cadra
                               luminance_lineaire, lab_moyen, nettete_mesure)
 
 MIN_PAIRES = 5
+POIDS_CORRECTION = 2.0          # une correction manuelle compte double
+VERSION_CACHE = 3
 
 
 class ErreurApp(Exception):
@@ -116,48 +121,108 @@ def reglages_cibles(avant, apres, cadre):
     return [ev, a_ap - a_av, b_ap - b_av, nettete]
 
 
+def _fichier_cache():
+    return dossier_donnees() / 'cache_exemples.json'
+
+
+def _lire_cache():
+    try:
+        donnees = json.loads(_fichier_cache().read_text(encoding='utf-8'))
+        return donnees['paires'] if donnees.get('version') == VERSION_CACHE else {}
+    except Exception:
+        return {}
+
+
+def _cle(raw, retouche):
+    a, b = Path(raw).stat(), Path(retouche).stat()
+    return f'{raw}|{a.st_size}|{a.st_mtime_ns}|{retouche}|{b.st_size}|{b.st_mtime_ns}'
+
+
+def chemin_precedent(chemin_modele):
+    return Path(chemin_modele).with_suffix('.precedent.pt')
+
+
+def restaurer_precedent(chemin_modele):
+    '''Revient au modèle d'avant le dernier entraînement. Retourne True si c'est fait.'''
+    chemin_modele = Path(chemin_modele)
+    ancien = chemin_precedent(chemin_modele)
+    if not ancien.exists():
+        return False
+    shutil.copy2(ancien, chemin_modele)
+    info = ancien.with_suffix('.json')
+    if info.exists():
+        shutil.copy2(info, _chemin_info(chemin_modele))
+    return True
+
+
 def entrainer_depuis_exemples(dossier_exemples, chemin_modele, rappel=None):
     '''rappel(i, n, statut, nom, detail) avec statut 'ok', 'ignore' ou 'fin'.
+    Utilise les paires avant/après ET les corrections manuelles enregistrées.
     Lève ErreurApp si les exemples sont insuffisants.'''
     def _rappel(*args):
         if rappel:
             rappel(*args)
 
     paires, _, _ = lister_paires(dossier_exemples)
-    if not paires:
+    toutes_corrections = corrections.lire()
+    if not paires and not toutes_corrections:
         raise ErreurApp('err_aucune_paire')
     n = len(paires)
-    X, Y, ignorees = [], [], 0
+    cache, nouveau_cache = _lire_cache(), {}
+    X, Y, poids, ignorees = [], [], [], 0
     for i, (raw, retouche) in enumerate(paires, 1):
         try:
-            f_avant = vers_float(charger_raw(raw))
-            f_apres = lire_image(retouche)
-            cadre = trouver_cadre(f_avant, f_apres)
-            if cadre is None:
-                ignorees += 1
-                _rappel(i, n, 'ignore', raw.name, 'cadrage')
-                continue
-            cibles = reglages_cibles(f_avant, f_apres, cadre)
-            visages = detecter_visages(vers_uint8(miniature(f_avant, 768)))
-            X.append(extraire_caracteristiques(miniature(f_avant, 256), visages))
-            b0, b1, b2, b3 = boite_groupe(visages) or (0.0, 0.0, 1.0, 1.0)
-            lw, lh = max(b2 - b0, 1e-3), max(b3 - b1, 1e-3)
-            relatif = [(cadre[0] - b0) / lw, (cadre[1] - b1) / lh,
-                       (cadre[2] - b0) / lw, (cadre[3] - b1) / lh]
-            Y.append(cibles + relatif)
+            cle = _cle(raw, retouche)
+            if cle in cache:                               # déjà analysée : pas de nouveau décodage
+                x, y = cache[cle]['x'], cache[cle]['y']
+            else:
+                f_avant = vers_float(charger_raw(raw))
+                f_apres = lire_image(retouche)
+                cadre = trouver_cadre(f_avant, f_apres)
+                if cadre is None:
+                    ignorees += 1
+                    _rappel(i, n, 'ignore', raw.name, 'cadrage')
+                    continue
+                cibles = reglages_cibles(f_avant, f_apres, cadre)
+                visages = detecter_visages(vers_uint8(miniature(f_avant, 768)))
+                x = [float(v) for v in extraire_caracteristiques(miniature(f_avant, 256), visages)]
+                b0, b1, b2, b3 = boite_groupe(visages) or (0.0, 0.0, 1.0, 1.0)
+                lw, lh = max(b2 - b0, 1e-3), max(b3 - b1, 1e-3)
+                relatif = [(cadre[0] - b0) / lw, (cadre[1] - b1) / lh,
+                           (cadre[2] - b0) / lw, (cadre[3] - b1) / lh]
+                y = [float(v) for v in cibles + relatif]
+            nouveau_cache[cle] = {'x': x, 'y': y}
+            X.append(x)
+            Y.append(y)
+            poids.append(1.0)
             _rappel(i, n, 'ok', raw.name, '')
         except Exception as e:
             ignorees += 1
             _rappel(i, n, 'ignore', raw.name, str(e))
+    try:
+        _fichier_cache().write_text(json.dumps({'version': VERSION_CACHE, 'paires': nouveau_cache}),
+                                    encoding='utf-8')
+    except OSError:
+        pass
+    n_paires = len(X)
+    for rec in toutes_corrections.values():                # ce que vous avez décidé après coup
+        x, y = corrections.vers_exemple(rec)
+        X.append(x)
+        Y.append(y)
+        poids.append(POIDS_CORRECTION)
     if len(X) < MIN_PAIRES:
         raise ErreurApp('err_pas_assez_paires', n=len(X), minimum=MIN_PAIRES)
     ia = StyleIA()
-    ia.entrainer(X, Y)
+    ia.entrainer(X, Y, poids)
     chemin_modele = Path(chemin_modele)
     chemin_modele.parent.mkdir(parents=True, exist_ok=True)
+    if chemin_modele.exists():                             # on garde l'ancien modèle en secours
+        shutil.copy2(chemin_modele, chemin_precedent(chemin_modele))
+        if _chemin_info(chemin_modele).exists():
+            shutil.copy2(_chemin_info(chemin_modele), chemin_precedent(chemin_modele).with_suffix('.json'))
     ia.sauver(chemin_modele)
-    info = {'date': datetime.now().isoformat(timespec='seconds'),
-            'paires': len(X), 'ignorees': ignorees}
+    info = {'date': datetime.now().isoformat(timespec='seconds'), 'paires': n_paires,
+            'corrections': len(toutes_corrections), 'ignorees': ignorees}
     _chemin_info(chemin_modele).write_text(json.dumps(info), encoding='utf-8')
     _rappel(n, n, 'fin', '', str(len(X)))
     return len(X)

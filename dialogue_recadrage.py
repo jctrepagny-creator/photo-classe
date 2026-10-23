@@ -1,15 +1,17 @@
 '''Fenêtre de recadrage manuel : on voit l'original en entier, on déplace / redimensionne le cadre.'''
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QDialog, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QSlider,
+                               QVBoxLayout, QWidget)
 
 import cadre_math as M
 import recadrage
 import theme
 from i18n import t
 from taches import Tache
+from traitement_image import appliquer_reglages, vers_uint8
 from widgets import Interrupteur, bouton
 
 _en_cours = []        # les travaux en arrière-plan survivent à la fermeture de la fenêtre
@@ -39,6 +41,10 @@ class ZoneCadre(QWidget):
         self._pm = QPixmap.fromImage(image)
         self.cadre = self.initial = tuple(cadre)
         self.ratio_px = ratio_px
+        self.update()
+
+    def maj_image(self, image):
+        self._pm = QPixmap.fromImage(image)
         self.update()
 
     def retablir(self):
@@ -127,7 +133,11 @@ class DialogueRecadrage(QDialog):
         self.setWindowTitle(t('recadrage_titre'))
         self.resize(980, 780)
         self.reglages = None
+        self.propose = None
+        self.carac = None
+        self.mini = None
         self.dims = (1, 1)
+        self._chargement = True
 
         mise = QVBoxLayout(self)
         mise.setContentsMargins(20, 18, 20, 18)
@@ -143,6 +153,27 @@ class DialogueRecadrage(QDialog):
         self.zone.modifie.connect(self._maj_taille)
         mise.addWidget(self.zone, 1)
 
+        grille = QGridLayout()
+        grille.setHorizontalSpacing(12)
+        self._curseurs, self._valeurs = {}, {}
+        for ligne, (cle, texte, mini_v, maxi_v) in enumerate((
+                ('ev', 'reg_exposition', -2.0, 3.0), ('da', 'reg_magenta', -20.0, 20.0),
+                ('db', 'reg_cyan', -20.0, 20.0), ('nettete', 'reg_nettete', 0.0, 2.0))):
+            s = QSlider(Qt.Orientation.Horizontal)
+            s.setRange(int(mini_v * 100), int(maxi_v * 100))
+            s.valueChanged.connect(self._curseur_change)
+            val = QLabel('')
+            val.setMinimumWidth(52)
+            grille.addWidget(QLabel(t(texte)), ligne // 2, (ligne % 2) * 3)
+            grille.addWidget(s, ligne // 2, (ligne % 2) * 3 + 1)
+            grille.addWidget(val, ligne // 2, (ligne % 2) * 3 + 2)
+            self._curseurs[cle], self._valeurs[cle] = s, val
+        mise.addLayout(grille)
+        self._minuteur = QTimer(self)
+        self._minuteur.setSingleShot(True)
+        self._minuteur.setInterval(70)
+        self._minuteur.timeout.connect(self._rafraichir_apercu)
+
         rang = QHBoxLayout()
         self.sw = Interrupteur()
         self.sw.setChecked(True)
@@ -153,11 +184,16 @@ class DialogueRecadrage(QDialog):
         self.l_taille = QLabel('')
         self.l_taille.setObjectName('Discret')
         rang.addWidget(self.l_taille)
+        rang.addSpacing(18)
+        self.sw_apprendre = Interrupteur()
+        self.sw_apprendre.setChecked(True)
+        rang.addWidget(self.sw_apprendre)
+        rang.addWidget(QLabel(t('apprendre_correction')))
         rang.addStretch(1)
         self.b_retablir = bouton(t('retablir'))
         self.b_annuler = bouton(t('annuler'))
         self.b_ok = bouton(t('enregistrer'), principal=True)
-        self.b_retablir.clicked.connect(self.zone.retablir)
+        self.b_retablir.clicked.connect(self._retablir)
         self.b_annuler.clicked.connect(self.reject)
         self.b_ok.clicked.connect(self._enregistrer)
         for b in (self.b_retablir, self.b_annuler, self.b_ok):
@@ -173,18 +209,57 @@ class DialogueRecadrage(QDialog):
         _lancer(tache)
 
     def _pret(self, res):
-        self.reglages, self.dims = res['reglages'], res['dims']
-        img = res['apercu']
-        h, w = img.shape[:2]
-        qi = QImage(img.data, w, h, 3 * w, QImage.Format.Format_RGB888).copy()
+        self.reglages, self.dims, self.carac = res['reglages'], res['dims'], res['carac']
+        self.propose = dict(self.reglages)
+        self.mini = res['mini']
         c = self.reglages['cadre']
         H, W = self.dims
         ratio = ((c[2] - c[0]) * W) / max((c[3] - c[1]) * H, 1)
-        self.zone.definir(qi, c, ratio)
+        self._chargement = True
+        for cle, s in self._curseurs.items():
+            s.setValue(int(round(self.reglages[cle] * 100)))
+        self._chargement = False
+        self.zone.definir(self._qimage(), c, ratio)
+        self._maj_valeurs()
         self.l_etat.setText(t('recadrage_pret'))
         for b in (self.b_retablir, self.b_ok):
             b.setEnabled(True)
         self._maj_taille()
+
+    def _lire_curseurs(self):
+        r = dict(self.reglages)
+        for cle, s in self._curseurs.items():
+            r[cle] = s.value() / 100.0
+        return r
+
+    def _qimage(self):
+        r = self._lire_curseurs()
+        img = vers_uint8(appliquer_reglages(self.mini, r['ev'], r['da'], r['db'], 0.0))
+        h, w = img.shape[:2]
+        return QImage(img.data, w, h, 3 * w, QImage.Format.Format_RGB888).copy()
+
+    def _maj_valeurs(self):
+        r = self._lire_curseurs()
+        for cle, val in self._valeurs.items():
+            val.setText(f'{r[cle]:+.2f}')
+
+    def _curseur_change(self, *_):
+        if self._chargement or self.mini is None:
+            return
+        self._maj_valeurs()
+        self._minuteur.start()
+
+    def _rafraichir_apercu(self):
+        self.zone.maj_image(self._qimage())
+
+    def _retablir(self):
+        self.zone.retablir()
+        self._chargement = True
+        for cle, s in self._curseurs.items():
+            s.setValue(int(round(self.propose[cle] * 100)))
+        self._chargement = False
+        self._maj_valeurs()
+        self._rafraichir_apercu()
 
     def _echec(self, message):
         self.l_etat.setText(message)
@@ -200,8 +275,10 @@ class DialogueRecadrage(QDialog):
         for b in (self.b_retablir, self.b_ok, self.b_annuler):
             b.setEnabled(False)
         self.l_etat.setText(t('recadrage_enregistrement'))
-        tache = Tache(recadrage.enregistrer, self.config, self.enreg['src'], self.reglages,
-                      self.zone.cadre, self.chemin)
+        decide = self._lire_curseurs()
+        decide['cadre'] = tuple(self.zone.cadre)
+        tache = Tache(recadrage.enregistrer, self.config, self.enreg['src'], self.propose, decide,
+                      self.chemin, self.carac, self.sw_apprendre.isChecked())
         tache.fini.connect(lambda _r: self.accept())
         tache.echec.connect(self._echec_enreg)
         _lancer(tache)
