@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 import corrections
+import dng
 import xmp
 from detection_visages import detecter_visages
 from entrainement import ErreurApp
@@ -55,6 +56,8 @@ def enregistrer(config, source, propose, decide, chemin, carac, apprendre=True):
     img = rendu(f, decide)
     chemin = Path(chemin)
     ecrire_image(img, chemin, config.qualite_jpeg)
+    if chemin.with_suffix('.dng').exists():
+        dng.ecrire(img, chemin.with_suffix('.dng'))
     for ext in ('.jpg', '.tif'):                         # autres formats produits pour cette photo
         autre = chemin.with_suffix(ext)
         if autre != chemin and autre.exists():

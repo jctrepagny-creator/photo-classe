@@ -12,6 +12,7 @@ class AppConfig:
     dossier_sortie: Path = _images / 'sortie'
     sortie_jpeg: bool = True             # formats produits (cumulables)
     sortie_tiff: bool = False
+    sortie_dng: bool = True              # RAW traité (DNG) : recadré et corrigé, à ouvrir dans Lightroom
     sortie_xmp: bool = False             # RAW d'origine + fichier XMP (Lightroom / Camera Raw)
     retraiter: bool = False              # retraiter aussi les photos déjà traitées
     qualite_jpeg: int = 95               # 1-100

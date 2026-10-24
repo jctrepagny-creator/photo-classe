@@ -5,6 +5,7 @@ dossier déposé (None pour un fichier déposé seul). Le classement en sortie r
 organisation : sortie / <dossier déposé> / <sous-dossiers>.'''
 import corrections
 import json
+import dng
 import xmp
 import re
 import shutil
@@ -259,12 +260,17 @@ def extensions_images(config):
 def exporter(img, base, config):
     '''Écrit les fichiers images cochés (JPEG et/ou TIFF). base = chemin sans extension.
     Retourne le chemin principal (le premier format coché).'''
-    exts = extensions_images(config) or ['.jpg']
+    exts = extensions_images(config)
     principal = None
+    if config.sortie_dng:
+        principal = dng.ecrire(img, Path(str(base) + '.dng'))
+    if not exts:
+        exts = ['.jpg']                      # aperçu pour la galerie
+    apercu = None
     for ext in exts:
         chemin = ecrire_image(img, Path(str(base) + ext), config.qualite_jpeg)
-        principal = principal or chemin
-    return principal
+        apercu = apercu or chemin
+    return apercu
 
 
 def copier_raw(sortie, raw, racine):
@@ -293,7 +299,8 @@ def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
     verifier_sortie(sortie)
     suivi = lire_suivi(sortie)
     n = len(elements)
-    exts = extensions_images(config) or ['.jpg']
+    exts = extensions_images(config) + (['.dng'] if config.sortie_dng else [])
+    exts = exts or ['.jpg']
     for i, (raw, racine) in enumerate(elements, 1):
         if arret is not None and arret.is_set():
             rappel(i - 1, n, 'stop', '', '')
@@ -329,10 +336,7 @@ def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
                 r = rep
             nom = (formater_nom(config.modele_renommage, i, raw.stem)
                    if config.renommer_fichiers else raw.stem)
-            if config.sortie_jpeg or config.sortie_tiff:
-                dossier = dossier_cible(sortie, raw, racine)
-            else:
-                dossier = sortie / 'apercus'          # RAW+XMP seul : petit aperçu pour la galerie
+            dossier = dossier_cible(sortie, raw, racine)
             base = dossier / nom
             k = 2
             while any(Path(str(base) + e).exists() for e in exts):
