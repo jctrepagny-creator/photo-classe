@@ -10,6 +10,7 @@ _images = Path.home() / 'Pictures' / 'PhotosClasse'
 @dataclass
 class AppConfig:
     dossier_sortie: Path = _images / 'sortie'
+    lecture_apercu: bool = True          # lire l'aperçu intégré du RAW (couleurs cohérentes avec l'entraînement)
     sortie_jpeg: bool = True             # formats produits (cumulables)
     sortie_tiff: bool = False
     sortie_dng: bool = True              # RAW traité (DNG) : recadré et corrigé, à ouvrir dans Lightroom

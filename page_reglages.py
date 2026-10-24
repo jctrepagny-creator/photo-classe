@@ -78,6 +78,10 @@ class PageReglages(PageBase):
         self.sw_raw.toggled.connect(self._raw)
         c.ajouter_layout(_ligne(t('reg_conserver_raw'), self.sw_raw))
         c.ajouter(texte_discret(t('reg_conserver_raw_aide')))
+        self.sw_apercu = Interrupteur()
+        self.sw_apercu.toggled.connect(self._apercu_raw)
+        c.ajouter_layout(_ligne(t('reg_apercu'), self.sw_apercu))
+        c.ajouter(texte_discret(t('reg_apercu_aide')))
         self.sw_retraiter = Interrupteur()
         self.sw_retraiter.toggled.connect(self._retraiter)
         c.ajouter_layout(_ligne(t('reg_retraiter'), self.sw_retraiter))
@@ -163,6 +167,7 @@ class PageReglages(PageBase):
         self.sw_dng.setChecked(cfg.sortie_dng)
         self.sw_xmp.setChecked(cfg.sortie_xmp)
         self.sw_retraiter.setChecked(cfg.retraiter)
+        self.sw_apercu.setChecked(cfg.lecture_apercu)
         self.qualite.setValue(int(cfg.qualite_jpeg))
         self.l_qualite.setText(str(int(cfg.qualite_jpeg)))
         self.qualite.setEnabled(cfg.sortie_jpeg)
@@ -216,6 +221,10 @@ class PageReglages(PageBase):
             return
         setattr(self.ctx.config, champ, bool(v))
         self.qualite.setEnabled(self.ctx.config.sortie_jpeg)
+        self._enregistrer()
+
+    def _apercu_raw(self, v):
+        self.ctx.config.lecture_apercu = bool(v)
         self._enregistrer()
 
     def _retraiter(self, v):

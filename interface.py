@@ -13,6 +13,7 @@ from page_reglages import PageReglages
 from page_resultats import PageResultats
 from page_traitement import PageTraitement
 from ui_maj import GestionnaireMaj
+import lecture_raw
 from version import VERSION
 from widgets import BandeSecurite, BoutonMenu, bouton, icone_application
 
@@ -28,6 +29,7 @@ class FenetrePrincipale(QMainWindow):
         self.setWindowIcon(icone_application())
         self.resize(1200, 800)
         self.setMinimumSize(1000, 660)
+        lecture_raw.mode_apercu = config.lecture_apercu
         self.maj = GestionnaireMaj(self)
 
         racine = QWidget()
@@ -103,6 +105,7 @@ class FenetrePrincipale(QMainWindow):
 
     # -- API utilisée par les pages
     def sauver_config(self):
+        lecture_raw.mode_apercu = self.config.lecture_apercu
         parametres.sauver(self.config)
 
     def aller(self, cle):

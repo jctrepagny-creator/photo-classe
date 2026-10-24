@@ -4,6 +4,7 @@ Les photos viennent d'une file d'attente : une liste de (fichier, racine) où `r
 dossier déposé (None pour un fichier déposé seul). Le classement en sortie reprend cette
 organisation : sortie / <dossier déposé> / <sous-dossiers>.'''
 import corrections
+import detection_visages
 import json
 import dng
 import xmp
@@ -170,12 +171,12 @@ def _noter_reglages(sortie, nom, r):
         nouveau = not chemin.exists()
         with open(chemin, 'a', encoding='utf-8') as f:
             if nouveau:
-                f.write('fichier;source;ev;da;db;nettete;x0;y0;x1;y1;sommet;axe;ev_limite\n')
+                f.write('fichier;source;ev;da;db;nettete;x0;y0;x1;y1;sommet;axe;ev_limite;visages;detection\n')
             c = r['cadre']
             f.write(';'.join(str(v) for v in (
                 nom, lecture_raw.derniere_source, f"{r['ev']:.2f}", f"{r['da']:.1f}", f"{r['db']:.1f}",
                 f"{r['nettete']:.2f}", *(f'{v:.3f}' for v in c), f"{r.get('sommet', -1):.3f}",
-                f"{r.get('axe') if r.get('axe') is not None else -1:.3f}", int(r.get('ev_limite', False)))) + '\n')
+                f"{r.get('axe') if r.get('axe') is not None else -1:.3f}", int(r.get('ev_limite', False)), r.get('nb_visages', 0), detection_visages.diagnostic['methode'])) + '\n')
     except OSError:
         pass
 
@@ -208,6 +209,7 @@ def analyser(f, ia, marge_haut=0.6, marge_photo=6, centrer=True):
     '''Réglages propres à CETTE photo (jamais un réglage global pour le lot).'''
     mini = vers_uint8(miniature(f, 768))
     visages = detecter_visages(mini)
+    nb_visages = len(visages)
     r = ia.predire(extraire_caracteristiques(miniature(f, 256), visages), marge_haut)
     if visages:
         if not centrer:
@@ -224,6 +226,7 @@ def analyser(f, ia, marge_haut=0.6, marge_photo=6, centrer=True):
         elif axe is not None:
             r['cadre'] = recentrer(r['cadre'], axe)
         r['axe'] = axe
+    r['nb_visages'] = nb_visages
     r['ev'], r['ev_limite'] = limiter_surexposition(f, r['cadre'], r['ev'])
     return r
 

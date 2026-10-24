@@ -22,7 +22,7 @@ from traitement_image import (vers_float, vers_uint8, miniature, appliquer_cadra
 
 MIN_PAIRES = 5
 POIDS_CORRECTION = 5.0          # une correction manuelle compte 5 fois plus qu'une paire
-VERSION_CACHE = 3
+VERSION_CACHE = 4
 
 
 class ErreurApp(Exception):

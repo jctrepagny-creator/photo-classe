@@ -118,7 +118,9 @@ def _texte_erreur(e):
     return m.decode('utf-8', 'replace') if isinstance(m, bytes) else str(m)
 
 
-derniere_source = ''      # 'raw', 'apercu' ou 'image' : sert au journal de diagnostic
+derniere_source = ''
+mode_apercu = True        # True : on lit l'aperçu intégré du RAW (rendu identique pour tous les appareils)
+SURFACE_APERCU_MIN = 6_000_000     # en dessous (≈ 6 Mpx), l'aperçu est trop petit : on décode le RAW      # 'raw', 'apercu' ou 'image' : sert au journal de diagnostic
 
 
 def charger_raw(chemin) -> np.ndarray:
@@ -127,6 +129,14 @@ def charger_raw(chemin) -> np.ndarray:
     if Path(chemin).suffix.lower() in EXT_IMAGES:
         derniere_source = 'image'
         return _lire_image(chemin)
+    if mode_apercu:
+        try:
+            img = _apercu_integre(chemin)
+            if img.shape[0] * img.shape[1] >= SURFACE_APERCU_MIN:
+                derniere_source = 'apercu'
+                return img
+        except Exception:
+            pass
     import rawpy
     try:
         with rawpy.imread(str(chemin)) as raw:

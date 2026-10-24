@@ -1,14 +1,11 @@
-'''Fichier de réglages XMP à côté du RAW d'origine : Lightroom / Camera Raw l'appliquent
-(recadrage, exposition, teinte, netteté) sans toucher au RAW.'''
+'''Fichier XMP à côté du RAW d'origine : Lightroom / Camera Raw appliquent le RECADRAGE sans toucher
+au RAW. (Exposition et couleurs ne sont pas écrites : elles ne sont pas comparables au rendu de Lightroom.)'''
 from pathlib import Path
 
-ECHELLE_TEMPERATURE = 2.5      # écart bleu/jaune (b) -> IncrementalTemperature (approximation)
-ECHELLE_TEINTE = 2.0           # écart vert/magenta (a) -> IncrementalTint (approximation)
 
 
 def contenu(r):
     x0, y0, x1, y1 = (min(max(float(v), 0.0), 1.0) for v in r['cadre'])
-    netteté = int(round(min(150, max(0, 40 + 40 * float(r['nettete'])))))
     return f'''<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -25,10 +22,7 @@ def contenu(r):
     crs:CropRight="{x1:.6f}"
     crs:CropBottom="{y1:.6f}"
     crs:CropAngle="0"
-    crs:Exposure2012="{float(r['ev']):+.2f}"
-    crs:IncrementalTemperature="{int(round(float(r['db']) * ECHELLE_TEMPERATURE))}"
-    crs:IncrementalTint="{int(round(float(r['da']) * ECHELLE_TEINTE))}"
-    crs:Sharpness="{netteté}"/>
+    crs:CropConstrainToUnitSquare="1"/>
  </rdf:RDF>
 </x:xmpmeta>
 <?xpacket end="w"?>

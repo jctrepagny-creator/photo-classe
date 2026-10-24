@@ -18,6 +18,8 @@ def t(cle, **params):
 
 TEXTES = {
     'fr': {
+        'reg_apercu': "Lire l'aperçu intégré du RAW",
+        'reg_apercu_aide': "Recommandé. Tous les appareils sont lus de la même façon (couleurs et luminosité identiques à celles de l'entraînement). Après un changement, refaites l'entraînement de l'IA.",
         'reg_format_dng': 'RAW traité (.dng) pour Lightroom',
         'reg_format_jpeg': 'JPEG', 'reg_format_tiff': 'TIFF 16 bits', 'reg_format_xmp': 'RAW d\'origine + XMP (Lightroom)',
         'reg_format_aide': "Plusieurs formats possibles à la fois. Le RAW traité (.dng) contient la photo DÉJÀ recadrée et corrigée : Lightroom l'affiche telle quelle. L'option RAW d'origine + XMP copie le RAW dans « originaux_raw » avec un fichier .xmp à côté : Lightroom / Camera Raw appliquent alors le recadrage et les corrections (valeurs de couleur approximatives). Sans JPEG ni TIFF, un JPEG d'aperçu est quand même créé pour la galerie.",
@@ -148,6 +150,8 @@ TEXTES = {
         'valid_arreter': 'Arrêter le lot',
     },
     'en': {
+        'reg_apercu': 'Read the RAW embedded preview',
+        'reg_apercu_aide': 'Recommended. All cameras are read the same way (same colours and brightness as in training). After changing this, train the AI again.',
         'reg_format_dng': 'Processed RAW (.dng) for Lightroom',
         'reg_format_jpeg': 'JPEG', 'reg_format_tiff': '16-bit TIFF', 'reg_format_xmp': 'Original RAW + XMP (Lightroom)',
         'reg_format_aide': 'Several formats at once. RAW + XMP copies the RAW to "originaux_raw" with a .xmp file beside it: Lightroom / Camera Raw then apply the crop and corrections (colour values are approximate). With no JPEG or TIFF, a preview JPEG is still created for the gallery.',

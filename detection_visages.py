@@ -5,6 +5,21 @@ import numpy as np
 
 _detecteur = None
 _cascade = None
+diagnostic = {'methode': 'aucune', 'erreur': ''}      # lu par le journal reglages.csv
+
+
+def _journaliser(texte):
+    '''Une seule ligne par erreur différente dans erreurs.log (dossier de données).'''
+    if diagnostic.get('deja') == texte:
+        return
+    diagnostic['deja'] = texte
+    try:
+        from datetime import datetime
+        from chemins import dossier_donnees
+        with open(dossier_donnees() / 'erreurs.log', 'a', encoding='utf-8') as f:
+            f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} | detection visages | {texte}\n")
+    except Exception:
+        pass
 
 
 def _mediapipe():
@@ -36,12 +51,18 @@ def detecter_visages(rgb8):
             b = d.location_data.relative_bounding_box
             boites.append((max(0.0, b.xmin), max(0.0, b.ymin),
                            min(1.0, b.xmin + b.width), min(1.0, b.ymin + b.height)))
+        diagnostic.update(methode='mediapipe', erreur='')
         return boites
-    except Exception:
-        pass
+    except Exception as e:
+        diagnostic['erreur'] = 'mediapipe: ' + repr(e)[:150]
+        _journaliser(diagnostic['erreur'])
     try:
-        return _haar(rgb8)
-    except Exception:
+        boites = _haar(rgb8)
+        diagnostic['methode'] = 'opencv'
+        return boites
+    except Exception as e:
+        diagnostic.update(methode='aucune', erreur=diagnostic['erreur'] + ' | opencv: ' + repr(e)[:150])
+        _journaliser(diagnostic['erreur'])
         return []
 
 
