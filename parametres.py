@@ -17,6 +17,9 @@ def charger():
         donnees = json.loads(FICHIER.read_text(encoding='utf-8'))
     except Exception:
         return cfg
+    if donnees.get('format_sortie') == 'TIFF':       # ancien réglage
+        donnees.setdefault('sortie_tiff', True)
+        donnees.setdefault('sortie_jpeg', False)
     for champ in fields(AppConfig):
         if champ.name not in donnees:
             continue

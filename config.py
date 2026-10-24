@@ -10,7 +10,10 @@ _images = Path.home() / 'Pictures' / 'PhotosClasse'
 @dataclass
 class AppConfig:
     dossier_sortie: Path = _images / 'sortie'
-    format_sortie: str = 'JPEG'          # 'JPEG' ou 'TIFF'
+    sortie_jpeg: bool = True             # formats produits (cumulables)
+    sortie_tiff: bool = False
+    sortie_xmp: bool = False             # RAW d'origine + fichier XMP (Lightroom / Camera Raw)
+    retraiter: bool = False              # retraiter aussi les photos déjà traitées
     qualite_jpeg: int = 95               # 1-100
     conserver_raw: bool = True
     renommer_fichiers: bool = True

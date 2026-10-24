@@ -32,9 +32,16 @@ class PageReglages(PageBase):
 
         # --- Sortie
         c = Carte(t('reg_sortie'))
-        self.format = Segment(['JPEG', 'TIFF 16 bits'])
-        self.format.change.connect(self._format)
-        c.ajouter_layout(_ligne(t('reg_format'), self.format))
+        self.sw_jpeg = Interrupteur()
+        self.sw_tiff = Interrupteur()
+        self.sw_xmp = Interrupteur()
+        self.sw_jpeg.toggled.connect(lambda v: self._format('sortie_jpeg', v))
+        self.sw_tiff.toggled.connect(lambda v: self._format('sortie_tiff', v))
+        self.sw_xmp.toggled.connect(lambda v: self._format('sortie_xmp', v))
+        c.ajouter_layout(_ligne(t('reg_format_jpeg'), self.sw_jpeg))
+        c.ajouter_layout(_ligne(t('reg_format_tiff'), self.sw_tiff))
+        c.ajouter_layout(_ligne(t('reg_format_xmp'), self.sw_xmp))
+        c.ajouter(texte_discret(t('reg_format_aide')))
         rang = QHBoxLayout()
         rang.setSpacing(12)
         rang.addWidget(QLabel(t('reg_qualite')))
@@ -68,6 +75,10 @@ class PageReglages(PageBase):
         self.sw_raw.toggled.connect(self._raw)
         c.ajouter_layout(_ligne(t('reg_conserver_raw'), self.sw_raw))
         c.ajouter(texte_discret(t('reg_conserver_raw_aide')))
+        self.sw_retraiter = Interrupteur()
+        self.sw_retraiter.toggled.connect(self._retraiter)
+        c.ajouter_layout(_ligne(t('reg_retraiter'), self.sw_retraiter))
+        c.ajouter(texte_discret(t('reg_retraiter_aide')))
         self.sw_ren = Interrupteur()
         self.sw_ren.toggled.connect(self._renommer)
         c.ajouter_layout(_ligne(t('reg_renommer'), self.sw_ren))
@@ -144,10 +155,13 @@ class PageReglages(PageBase):
     def rafraichir(self):
         cfg = self.ctx.config
         self._chargement = True
-        self.format.set_index(1 if cfg.format_sortie == 'TIFF' else 0)
+        self.sw_jpeg.setChecked(cfg.sortie_jpeg)
+        self.sw_tiff.setChecked(cfg.sortie_tiff)
+        self.sw_xmp.setChecked(cfg.sortie_xmp)
+        self.sw_retraiter.setChecked(cfg.retraiter)
         self.qualite.setValue(int(cfg.qualite_jpeg))
         self.l_qualite.setText(str(int(cfg.qualite_jpeg)))
-        self.qualite.setEnabled(cfg.format_sortie != 'TIFF')
+        self.qualite.setEnabled(cfg.sortie_jpeg)
         self.l_dossier.setText(str(cfg.dossier_sortie))
         self.sw_raw.setChecked(cfg.conserver_raw)
         self.sw_ren.setChecked(cfg.renommer_fichiers)
@@ -179,7 +193,7 @@ class PageReglages(PageBase):
             self.l_apercu.setObjectName('Discret')
         elif pipeline.modele_valide(cfg.modele_renommage):
             nom = pipeline.formater_nom(cfg.modele_renommage, 1, 'IMG_1234')
-            self.l_apercu.setText(t('apercu_nom', nom=nom, ext='.tif' if cfg.format_sortie == 'TIFF' else '.jpg'))
+            self.l_apercu.setText(t('apercu_nom', nom=nom, ext='.jpg' if cfg.sortie_jpeg or not cfg.sortie_tiff else '.tif'))
             self.l_apercu.setObjectName('Discret')
         else:
             self.l_apercu.setText(t('modele_invalide'))
@@ -193,9 +207,15 @@ class PageReglages(PageBase):
             self.ctx.sauver_config()
             self._apercu()
 
-    def _format(self, i):
-        self.ctx.config.format_sortie = 'TIFF' if i == 1 else 'JPEG'
-        self.qualite.setEnabled(i == 0)
+    def _format(self, champ, v):
+        if self._chargement:
+            return
+        setattr(self.ctx.config, champ, bool(v))
+        self.qualite.setEnabled(self.ctx.config.sortie_jpeg)
+        self._enregistrer()
+
+    def _retraiter(self, v):
+        self.ctx.config.retraiter = bool(v)
         self._enregistrer()
 
     def _qualite(self, v):

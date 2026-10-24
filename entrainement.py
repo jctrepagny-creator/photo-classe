@@ -21,7 +21,7 @@ from traitement_image import (vers_float, vers_uint8, miniature, appliquer_cadra
                               luminance_lineaire, lab_moyen, nettete_mesure)
 
 MIN_PAIRES = 5
-POIDS_CORRECTION = 2.0          # une correction manuelle compte double
+POIDS_CORRECTION = 5.0          # une correction manuelle compte 5 fois plus qu'une paire
 VERSION_CACHE = 3
 
 

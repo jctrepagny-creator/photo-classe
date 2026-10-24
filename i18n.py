@@ -18,6 +18,10 @@ def t(cle, **params):
 
 TEXTES = {
     'fr': {
+        'reg_format_jpeg': 'JPEG', 'reg_format_tiff': 'TIFF 16 bits', 'reg_format_xmp': 'RAW d\'origine + XMP (Lightroom)',
+        'reg_format_aide': "Plusieurs formats possibles à la fois. L'option RAW + XMP copie le RAW dans « originaux_raw » avec un fichier .xmp à côté : Lightroom / Camera Raw appliquent alors le recadrage et les corrections (valeurs de couleur approximatives). Sans JPEG ni TIFF, seul un petit aperçu est créé dans « apercus ».",
+        'reg_retraiter': 'Retraiter les photos déjà traitées',
+        'reg_retraiter_aide': "Sinon, une photo déjà traitée est sautée. Si vous l'avez corrigée à la main, votre réglage est repris tel quel.",
         'apprendre_correction': "Apprendre de cette correction",
         'corrections_etat': "Corrections manuelles mémorisées : {n} (dont {attente} pas encore apprises).",
         'maj_ia_titre': "Mettre à jour l'IA ?",
@@ -143,6 +147,10 @@ TEXTES = {
         'valid_arreter': 'Arrêter le lot',
     },
     'en': {
+        'reg_format_jpeg': 'JPEG', 'reg_format_tiff': '16-bit TIFF', 'reg_format_xmp': 'Original RAW + XMP (Lightroom)',
+        'reg_format_aide': 'Several formats at once. RAW + XMP copies the RAW to "originaux_raw" with a .xmp file beside it: Lightroom / Camera Raw then apply the crop and corrections (colour values are approximate). With no JPEG or TIFF, only a small preview is created in "apercus".',
+        'reg_retraiter': 'Reprocess photos already processed',
+        'reg_retraiter_aide': 'Otherwise an already processed photo is skipped. If you corrected it by hand, your settings are reused as they are.',
         'apprendre_correction': 'Learn from this correction',
         'corrections_etat': 'Manual corrections stored: {n} ({attente} not learned yet).',
         'maj_ia_titre': 'Update the AI?',

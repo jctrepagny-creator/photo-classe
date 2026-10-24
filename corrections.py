@@ -44,6 +44,12 @@ def lire():
     return {k: r for k, r in derniere.items() if r.get('apprendre', True)}
 
 
+def decision_pour(src):
+    '''Réglages que VOUS avez décidés pour cette photo (ou None). Réutilisés tels quels si elle est retraitée.'''
+    r = lire().get(str(src))
+    return None if r is None else r['decide']
+
+
 def en_attente(date_modele):
     '''Nombre de corrections plus récentes que le dernier entraînement.'''
     toutes = lire().values()

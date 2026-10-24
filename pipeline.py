@@ -3,7 +3,9 @@
 Les photos viennent d'une file d'attente : une liste de (fichier, racine) où `racine` est le
 dossier déposé (None pour un fichier déposé seul). Le classement en sortie reprend cette
 organisation : sortie / <dossier déposé> / <sous-dossiers>.'''
+import corrections
 import json
+import xmp
 import re
 import shutil
 from datetime import datetime
@@ -245,20 +247,38 @@ def ecrire_image(img, chemin, qualite=95):
     return chemin
 
 
+def extensions_images(config):
+    ext = []
+    if config.sortie_jpeg:
+        ext.append('.jpg')
+    if config.sortie_tiff:
+        ext.append('.tif')
+    return ext
+
+
 def exporter(img, base, config):
-    '''Écrit le fichier final. base = chemin sans extension. Retourne le chemin écrit.'''
-    if config.format_sortie == 'TIFF':
-        ext, data, params = '.tif', vers_uint16(img), []
-    else:
-        ext, data = '.jpg', vers_uint8(img)
-        params = [cv2.IMWRITE_JPEG_QUALITY, int(config.qualite_jpeg)]
-    ok, tampon = cv2.imencode(ext, cv2.cvtColor(data, cv2.COLOR_RGB2BGR), params)
-    if not ok:
-        raise RuntimeError('Encodage impossible')
-    chemin = Path(str(base) + ext)
-    chemin.parent.mkdir(parents=True, exist_ok=True)
-    tampon.tofile(str(chemin))
-    return chemin
+    '''Écrit les fichiers images cochés (JPEG et/ou TIFF). base = chemin sans extension.
+    Retourne le chemin principal (le premier format coché).'''
+    exts = extensions_images(config) or ['.jpg']
+    principal = None
+    for ext in exts:
+        chemin = ecrire_image(img, Path(str(base) + ext), config.qualite_jpeg)
+        principal = principal or chemin
+    return principal
+
+
+def copier_raw(sortie, raw, racine):
+    dest = (sortie / DOSSIER_RAW / raw.name if racine is None
+            else sortie / DOSSIER_RAW / _nom_dossier(racine) / raw.relative_to(racine))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if not dest.exists():
+        shutil.copy2(raw, dest)
+    return dest
+
+
+def ecrire_xmp(sortie, raw, racine, reglages):
+    '''RAW d'origine copié + fichier XMP à côté (Lightroom / Camera Raw).'''
+    return xmp.ecrire(copier_raw(Path(sortie), Path(raw), racine), reglages)
 
 
 def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
@@ -273,7 +293,7 @@ def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
     verifier_sortie(sortie)
     suivi = lire_suivi(sortie)
     n = len(elements)
-    ext = '.tif' if config.format_sortie == 'TIFF' else '.jpg'
+    exts = extensions_images(config) or ['.jpg']
     for i, (raw, racine) in enumerate(elements, 1):
         if arret is not None and arret.is_set():
             rappel(i - 1, n, 'stop', '', '')
@@ -285,7 +305,8 @@ def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
             rappel(i, n, 'erreur', raw.name, str(e))
             continue
         deja = suivi.get(str(raw))
-        if deja and deja.get('taille') == taille and Path(deja['sortie']).exists():
+        if (deja and not config.retraiter and deja.get('taille') == taille
+                and Path(deja['sortie']).exists()):
             rappel(i, n, 'saute', raw.name, deja['sortie'])
             continue
         rappel(i - 1, n, 'debut', raw.name, '')
@@ -293,6 +314,9 @@ def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
             f = vers_float(charger_raw(raw))
             r = analyser(f, ia, config.marge_haut / 100.0, config.marge_haut_photo,
                          config.centrer_visage)
+            decision = corrections.decision_pour(raw)      # déjà corrigée par vous : on garde votre choix
+            if decision is not None:
+                r = dict(r, **decision)
             _noter_reglages(sortie, raw.name, r)
             if not config.mode_automatique and valider is not None:
                 rep = valider(miniature(f, 900), r)
@@ -305,17 +329,21 @@ def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
                 r = rep
             nom = (formater_nom(config.modele_renommage, i, raw.stem)
                    if config.renommer_fichiers else raw.stem)
-            base = base_libre(dossier_cible(sortie, raw, racine) / nom, ext)
+            if config.sortie_jpeg or config.sortie_tiff:
+                dossier = dossier_cible(sortie, raw, racine)
+            else:
+                dossier = sortie / 'apercus'          # RAW+XMP seul : petit aperçu pour la galerie
+            base = dossier / nom
+            k = 2
+            while any(Path(str(base) + e).exists() for e in exts):
+                base = dossier / f'{nom}_{k}'
+                k += 1
             cree = exporter(rendu(f, r), base, config)
             del f
-            if config.conserver_raw:
-                if racine is None:
-                    dest = sortie / DOSSIER_RAW / raw.name
-                else:
-                    dest = sortie / DOSSIER_RAW / _nom_dossier(racine) / raw.relative_to(racine)
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                if not dest.exists():
-                    shutil.copy2(raw, dest)
+            if config.sortie_xmp:
+                ecrire_xmp(sortie, raw, racine, r)
+            elif config.conserver_raw:
+                copier_raw(sortie, raw, racine)
             _noter(sortie, raw, taille, cree, r)
             rappel(i, n, 'ok', raw.name, str(cree))
         except Exception as e:

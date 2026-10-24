@@ -5,11 +5,12 @@ import os
 from pathlib import Path
 
 import corrections
+import xmp
 from detection_visages import detecter_visages
 from entrainement import ErreurApp
 from ia_style import StyleIA, extraire_caracteristiques
 from lecture_raw import charger_raw
-from pipeline import _noter, analyser, ecrire_image, lire_suivi, rendu
+from pipeline import DOSSIER_RAW, _noter, analyser, ecrire_image, lire_suivi, rendu
 from traitement_image import miniature, vers_float, vers_uint8
 
 CLES = ('ev', 'da', 'db', 'nettete')
@@ -51,7 +52,17 @@ def enregistrer(config, source, propose, decide, chemin, carac, apprendre=True):
     Si quelque chose a changé, la correction est mémorisée pour l'apprentissage.'''
     decide = _propre(decide)
     f = vers_float(charger_raw(source))
-    ecrire_image(rendu(f, decide), chemin, config.qualite_jpeg)
+    img = rendu(f, decide)
+    chemin = Path(chemin)
+    ecrire_image(img, chemin, config.qualite_jpeg)
+    for ext in ('.jpg', '.tif'):                         # autres formats produits pour cette photo
+        autre = chemin.with_suffix(ext)
+        if autre != chemin and autre.exists():
+            ecrire_image(img, autre, config.qualite_jpeg)
+    if config.sortie_xmp:                                # met aussi à jour le XMP de Lightroom
+        copie = next(iter((Path(config.dossier_sortie) / DOSSIER_RAW).rglob(Path(source).name)), None)
+        if copie is not None:
+            xmp.ecrire(copie, decide)
     _noter(config.dossier_sortie, source, Path(source).stat().st_size, chemin, decide)
     propose = _propre(propose)
     change = any(abs(decide[k] - propose[k]) > 1e-3 for k in CLES) or any(
