@@ -18,6 +18,9 @@ def t(cle, **params):
 
 TEXTES = {
     'fr': {
+        'reg_couleur': 'Correction des couleurs',
+        'couleur_1': '1 · Aucune', 'couleur_2': '2 · Exposition', 'couleur_3': '3 · Complète',
+        'reg_couleur_aide': "1 : l'appli recadre seulement, les couleurs ne sont pas touchées. 2 : l'IA ajuste seulement la luminosité. 3 : l'IA règle aussi la teinte et la netteté.",
         'reg_apercu': "Lire l'aperçu intégré du RAW",
         'reg_apercu_aide': "Recommandé. Tous les appareils sont lus de la même façon (couleurs et luminosité identiques à celles de l'entraînement). Après un changement, refaites l'entraînement de l'IA.",
         'reg_format_dng': 'RAW traité (.dng) pour Lightroom',
@@ -150,6 +153,9 @@ TEXTES = {
         'valid_arreter': 'Arrêter le lot',
     },
     'en': {
+        'reg_couleur': 'Colour correction',
+        'couleur_1': '1 · None', 'couleur_2': '2 · Exposure', 'couleur_3': '3 · Full',
+        'reg_couleur_aide': '1: crop only, colours untouched. 2: the AI only adjusts brightness. 3: the AI also adjusts tint and sharpness.',
         'reg_apercu': 'Read the RAW embedded preview',
         'reg_apercu_aide': 'Recommended. All cameras are read the same way (same colours and brightness as in training). After changing this, train the AI again.',
         'reg_format_dng': 'Processed RAW (.dng) for Lightroom',

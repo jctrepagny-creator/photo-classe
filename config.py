@@ -14,11 +14,13 @@ class AppConfig:
     sortie_jpeg: bool = True             # formats produits (cumulables)
     sortie_tiff: bool = False
     sortie_dng: bool = True              # RAW traité (DNG) : recadré et corrigé, à ouvrir dans Lightroom
-    sortie_xmp: bool = False             # RAW d'origine + fichier XMP (Lightroom / Camera Raw)
+    mode_couleur: int = 2                # 1 aucune correction, 2 exposition seulement, 3 complet (IA)
+    migration_134: bool = True           # (interne) anciens réglages mis à jour une fois
+    sortie_xmp: bool = True              # RAW d'origine + fichier XMP (Lightroom / Camera Raw)
     retraiter: bool = False              # retraiter aussi les photos déjà traitées
     qualite_jpeg: int = 95               # 1-100
     conserver_raw: bool = True
-    renommer_fichiers: bool = True
+    renommer_fichiers: bool = False      # False : la photo garde le numéro de son RAW (_DSC8163.jpg)
     modele_renommage: str = 'classe_{index:04d}'
     centrer_visage: bool = True          # nez au milieu de la photo
     marge_haut_photo: int = 6            # espace au-dessus des cheveux, en % de la hauteur de la photo finale

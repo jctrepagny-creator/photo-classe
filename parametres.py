@@ -20,6 +20,10 @@ def charger():
     if donnees.get('format_sortie') == 'TIFF':       # ancien réglage
         donnees.setdefault('sortie_tiff', True)
         donnees.setdefault('sortie_jpeg', False)
+    if not donnees.get('migration_134'):             # v1.3.4 : noms d'origine + XMP par défaut
+        donnees['renommer_fichiers'] = False
+        donnees['sortie_xmp'] = True
+        donnees['migration_134'] = True
     for champ in fields(AppConfig):
         if champ.name not in donnees:
             continue

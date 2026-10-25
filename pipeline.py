@@ -231,6 +231,17 @@ def analyser(f, ia, marge_haut=0.6, marge_photo=6, centrer=True):
     return r
 
 
+def appliquer_mode_couleur(r, mode):
+    '''1 : aucune correction · 2 : exposition seulement · 3 : exposition, teinte et netteté (IA).'''
+    r = dict(r)
+    if mode <= 1:
+        r.update(ev=0.0, da=0.0, db=0.0, nettete=0.0)
+        r['ev_limite'] = False
+    elif mode == 2:
+        r.update(da=0.0, db=0.0)
+    return r
+
+
 def rendu(f, r):
     zone = appliquer_cadrage(f, r['cadre'])
     return appliquer_reglages(zone, r['ev'], r['da'], r['db'], r['nettete'])
@@ -324,6 +335,7 @@ def traiter_lot(config, ia, elements, rappel, valider=None, arret=None):
             f = vers_float(charger_raw(raw))
             r = analyser(f, ia, config.marge_haut / 100.0, config.marge_haut_photo,
                          config.centrer_visage)
+            r = appliquer_mode_couleur(r, config.mode_couleur)
             decision = corrections.decision_pour(raw)      # déjà corrigée par vous : on garde votre choix
             if decision is not None:
                 r = dict(r, **decision)

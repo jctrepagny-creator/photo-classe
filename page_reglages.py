@@ -86,6 +86,10 @@ class PageReglages(PageBase):
         self.sw_retraiter.toggled.connect(self._retraiter)
         c.ajouter_layout(_ligne(t('reg_retraiter'), self.sw_retraiter))
         c.ajouter(texte_discret(t('reg_retraiter_aide')))
+        self.couleur = Segment([t('couleur_1'), t('couleur_2'), t('couleur_3')])
+        self.couleur.change.connect(self._couleur)
+        c.ajouter_layout(_ligne(t('reg_couleur'), self.couleur))
+        c.ajouter(texte_discret(t('reg_couleur_aide')))
         self.sw_ren = Interrupteur()
         self.sw_ren.toggled.connect(self._renommer)
         c.ajouter_layout(_ligne(t('reg_renommer'), self.sw_ren))
@@ -168,6 +172,7 @@ class PageReglages(PageBase):
         self.sw_xmp.setChecked(cfg.sortie_xmp)
         self.sw_retraiter.setChecked(cfg.retraiter)
         self.sw_apercu.setChecked(cfg.lecture_apercu)
+        self.couleur.set_index(max(0, min(2, int(cfg.mode_couleur) - 1)))
         self.qualite.setValue(int(cfg.qualite_jpeg))
         self.l_qualite.setText(str(int(cfg.qualite_jpeg)))
         self.qualite.setEnabled(cfg.sortie_jpeg)
@@ -221,6 +226,10 @@ class PageReglages(PageBase):
             return
         setattr(self.ctx.config, champ, bool(v))
         self.qualite.setEnabled(self.ctx.config.sortie_jpeg)
+        self._enregistrer()
+
+    def _couleur(self, i):
+        self.ctx.config.mode_couleur = int(i) + 1
         self._enregistrer()
 
     def _apercu_raw(self, v):
