@@ -2,6 +2,7 @@
 ce que l'IA avait PROPOSÉ et ce que vous avez DÉCIDÉ. Elles servent ensuite à réentraîner l'IA.'''
 import json
 from datetime import datetime
+from pathlib import Path
 
 from chemins import dossier_donnees
 
@@ -17,7 +18,11 @@ def enregistrer(src, carac, propose, decide, apprendre=True):
     def nettoyer(r):
         return {'ev': float(r['ev']), 'da': float(r['da']), 'db': float(r['db']),
                 'nettete': float(r['nettete']), 'cadre': [float(v) for v in r['cadre']]}
-    ligne = {'src': str(src), 'date': datetime.now().isoformat(timespec='seconds'),
+    try:
+        taille = Path(src).stat().st_size
+    except OSError:
+        taille = None
+    ligne = {'src': str(src), 'taille': taille, 'date': datetime.now().isoformat(timespec='seconds'),
              'carac': [float(v) for v in carac], 'propose': nettoyer(propose),
              'decide': nettoyer(decide), 'apprendre': bool(apprendre)}
     try:
@@ -45,8 +50,22 @@ def lire():
 
 
 def decision_pour(src):
-    '''Réglages que VOUS avez décidés pour cette photo (ou None). Réutilisés tels quels si elle est retraitée.'''
-    r = lire().get(str(src))
+    '''Réglages que VOUS avez décidés pour cette photo (ou None), même si le RAW a été copié ou
+    déplacé : on reconnaît le fichier à son chemin, sinon à son nom ET sa taille.'''
+    src = Path(src)
+    toutes = lire()
+    r = toutes.get(str(src))
+    if r is None:
+        try:
+            taille = src.stat().st_size
+        except OSError:
+            return None
+        meilleur = None
+        for x in toutes.values():
+            if x.get('taille') == taille and Path(x['src']).name.lower() == src.name.lower():
+                if meilleur is None or x['date'] > meilleur['date']:
+                    meilleur = x
+        r = meilleur
     return None if r is None else r['decide']
 
 
