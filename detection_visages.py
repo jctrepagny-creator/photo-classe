@@ -31,6 +31,34 @@ def _mediapipe():
     return _detecteur
 
 
+_yunet_obj = None
+_derniers_axes = []          # [(centre_x_du_visage, axe)] de la dernière image analysée
+
+
+def _yunet(rgb8):
+    '''YuNet (OpenCV) : boîtes + 5 repères (yeux, nez, bouche) pour centrer le nez.'''
+    global _yunet_obj, _derniers_axes
+    import modeles_detection as md
+    h, w = rgb8.shape[:2]
+    if _yunet_obj is None:
+        chemin = md.obtenir(md.YUNET)
+        if chemin is None:
+            raise RuntimeError('modèle YuNet indisponible : ' + md.derniere_erreur(md.YUNET))
+        _yunet_obj = cv2.FaceDetectorYN.create(str(chemin), '', (w, h), 0.6, 0.3, 50)
+    _yunet_obj.setInputSize((w, h))
+    _, faces = _yunet_obj.detect(cv2.cvtColor(rgb8, cv2.COLOR_RGB2BGR))
+    boites, axes = [], []
+    for f in (faces if faces is not None else []):
+        x, y, fw, fh = (float(v) for v in f[:4])
+        boite = (max(0.0, x / w), max(0.0, y / h), min(1.0, (x + fw) / w), min(1.0, (y + fh) / h))
+        yeux = (f[4] + f[6]) / 2 / w
+        nez, bouche = f[8] / w, (f[10] + f[12]) / 2 / w
+        axes.append(((boite[0] + boite[2]) / 2, float(min(max((yeux + nez + bouche) / 3, 0.0), 1.0))))
+        boites.append(boite)
+    _derniers_axes = axes
+    return boites
+
+
 def _haar(rgb8):
     global _cascade
     if _cascade is None:
@@ -49,6 +77,13 @@ def _haar(rgb8):
                     _cascade = c
                     break
         if _cascade is None:
+            import modeles_detection as md
+            chemin = md.obtenir(md.HAAR)
+            if chemin is not None:
+                c = cv2.CascadeClassifier(str(chemin))
+                if not c.empty():
+                    _cascade = c
+        if _cascade is None:
             raise RuntimeError('fichier haarcascade introuvable')
     gris = cv2.cvtColor(rgb8, cv2.COLOR_RGB2GRAY)
     h, w = gris.shape
@@ -57,27 +92,35 @@ def _haar(rgb8):
 
 
 def detecter_visages(rgb8):
-    '''rgb8 : image uint8 RGB. Retourne une liste de boîtes (x0, y0, x1, y1) entre 0 et 1.'''
-    try:
-        res = _mediapipe().process(rgb8)
-        boites = []
-        for d in (res.detections or []):
-            b = d.location_data.relative_bounding_box
-            boites.append((max(0.0, b.xmin), max(0.0, b.ymin),
-                           min(1.0, b.xmin + b.width), min(1.0, b.ymin + b.height)))
-        diagnostic.update(methode='mediapipe', erreur='')
-        return boites
-    except Exception as e:
-        diagnostic['erreur'] = 'mediapipe: ' + repr(e)[:150]
-        _journaliser(diagnostic['erreur'])
-    try:
-        boites = _haar(rgb8)
-        diagnostic['methode'] = 'opencv'
-        return boites
-    except Exception as e:
-        diagnostic.update(methode='aucune', erreur=diagnostic['erreur'] + ' | opencv: ' + repr(e)[:150])
-        _journaliser(diagnostic['erreur'])
-        return []
+    '''rgb8 : image uint8 RGB. Retourne une liste de boîtes (x0, y0, x1, y1) entre 0 et 1.
+    Essaie dans l'ordre : MediaPipe, YuNet (OpenCV), Haar (OpenCV).'''
+    global _derniers_axes
+    _derniers_axes = []
+    erreurs = []
+    for nom, fonction in (('mediapipe', _visages_mediapipe), ('yunet', _yunet), ('opencv', _haar)):
+        if nom == 'mediapipe' and diagnostic.get('mp_ko'):
+            continue
+        try:
+            boites = fonction(rgb8)
+            diagnostic.update(methode=nom, erreur=' | '.join(erreurs))
+            return boites
+        except Exception as e:
+            if nom == 'mediapipe':
+                diagnostic['mp_ko'] = True
+            erreurs.append(f'{nom}: {e!r}'[:200])
+            _journaliser(' | '.join(erreurs))
+    diagnostic.update(methode='aucune', erreur=' | '.join(erreurs))
+    return []
+
+
+def _visages_mediapipe(rgb8):
+    res = _mediapipe().process(rgb8)
+    boites = []
+    for d in (res.detections or []):
+        b = d.location_data.relative_bounding_box
+        boites.append((max(0.0, b.xmin), max(0.0, b.ymin),
+                       min(1.0, b.xmin + b.width), min(1.0, b.ymin + b.height)))
+    return boites
 
 
 def boite_groupe(visages):
@@ -167,6 +210,9 @@ def axe_du_visage(rgb8, boite):
     '''Position horizontale (0-1) de l'axe du visage : moyenne du milieu des yeux, du nez et
     de la bouche (MediaPipe). Sans MediaPipe : centre de la boîte du visage.'''
     centre = (boite[0] + boite[2]) / 2
+    for c, axe in _derniers_axes:                      # repères YuNet de la même image
+        if abs(c - centre) < 0.05:
+            return float(axe)
     try:
         meilleur, ecart = None, 1.0
         for d in (_mediapipe().process(rgb8).detections or []):
