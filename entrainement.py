@@ -22,7 +22,7 @@ from traitement_image import (vers_float, vers_uint8, miniature, appliquer_cadra
 
 MIN_PAIRES = 5
 POIDS_CORRECTION = 5.0          # une correction manuelle compte 5 fois plus qu'une paire
-VERSION_CACHE = 4
+VERSION_CACHE = 5
 
 
 class ErreurApp(Exception):
@@ -206,6 +206,17 @@ def entrainer_depuis_exemples(dossier_exemples, chemin_modele, rappel=None):
         pass
     n_paires = len(X)
     for rec in toutes_corrections.values():                # ce que vous avez décidé après coup
+        if list(rec['carac'][11:15]) == [0.0, 0.0, 1.0, 1.0]:
+            # correction faite quand aucun visage n'était détecté : on refait les mesures sur la photo
+            try:
+                visages = detecter_visages(vers_uint8(miniature(vers_float(charger_raw(rec['src'])), 768)))
+                if not visages:
+                    continue
+                f_src = vers_float(charger_raw(rec['src']))
+                rec = dict(rec, carac=[float(v) for v in extraire_caracteristiques(
+                    miniature(f_src, 256), visages)])
+            except Exception:
+                continue
         x, y = corrections.vers_exemple(rec)
         X.append(x)
         Y.append(y)

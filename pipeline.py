@@ -238,7 +238,7 @@ def appliquer_mode_couleur(r, mode):
         r.update(ev=0.0, da=0.0, db=0.0, nettete=0.0)
         r['ev_limite'] = False
     elif mode == 2:
-        r.update(da=0.0, db=0.0)
+        r.update(da=0.0, db=0.0, nettete=0.0)
     return r
 
 

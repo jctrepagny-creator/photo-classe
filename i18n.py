@@ -20,7 +20,7 @@ TEXTES = {
     'fr': {
         'reg_couleur': 'Correction des couleurs',
         'couleur_1': '1 · Aucune', 'couleur_2': '2 · Exposition', 'couleur_3': '3 · Complète',
-        'reg_couleur_aide': "1 : l'appli recadre seulement, les couleurs ne sont pas touchées. 2 : l'IA ajuste seulement la luminosité. 3 : l'IA règle aussi la teinte et la netteté.",
+        'reg_couleur_aide': "1 : l'appli recadre seulement, les couleurs ne sont pas touchées. 2 : l'IA ajuste seulement la luminosité (ni teinte, ni netteté). 3 : l'IA règle aussi la teinte et la netteté.",
         'reg_apercu': "Lire l'aperçu intégré du RAW",
         'reg_apercu_aide': "Recommandé. Tous les appareils sont lus de la même façon (couleurs et luminosité identiques à celles de l'entraînement). Après un changement, refaites l'entraînement de l'IA.",
         'reg_format_dng': 'RAW traité (.dng) pour Lightroom',

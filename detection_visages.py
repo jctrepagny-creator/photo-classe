@@ -34,8 +34,22 @@ def _mediapipe():
 def _haar(rgb8):
     global _cascade
     if _cascade is None:
-        _cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        import os
+        import sys
+        nom = 'haarcascade_frontalface_default.xml'
+        dossiers = [getattr(getattr(cv2, 'data', None), 'haarcascades', ''),
+                    os.path.join(os.path.dirname(cv2.__file__), 'data'),
+                    os.path.join(getattr(sys, '_MEIPASS', ''), 'cv2', 'data'),
+                    os.path.join(getattr(sys, '_MEIPASS', ''), 'cv2', 'data', '')]
+        for dossier in dossiers:
+            chemin = os.path.join(dossier, nom) if dossier else ''
+            if chemin and os.path.exists(chemin):
+                c = cv2.CascadeClassifier(chemin)
+                if not c.empty():
+                    _cascade = c
+                    break
+        if _cascade is None:
+            raise RuntimeError('fichier haarcascade introuvable')
     gris = cv2.cvtColor(rgb8, cv2.COLOR_RGB2GRAY)
     h, w = gris.shape
     faces = _cascade.detectMultiScale(gris, 1.1, 5, minSize=(24, 24))
